@@ -24,7 +24,7 @@ export default function VoiceSession({ onComplete, onError, onCancel }: VoiceSes
   const endConversation = useCallback(async () => {
     if (conversationRef.current) {
       try {
-        // @ts-expect-error - 11Labs SDK types
+        // @ts-expect-error - ElevenLabs SDK types
         await conversationRef.current.endSession()
       } catch (err) {
         console.error('Error ending conversation:', err)
@@ -70,13 +70,13 @@ export default function VoiceSession({ onComplete, onError, onCancel }: VoiceSes
             setStatusMessage('Processing your report...')
           },
           onMessage: (message: { source: string; message: string }) => {
-            console.log('[11Labs Message]:', message)
+            console.log('[ElevenLabs Message]:', message)
             if (message.source === 'ai') {
               setStatusMessage(message.message.substring(0, 100) + '...')
             }
           },
           onError: (message: string, context?: unknown) => {
-            console.error('[11Labs Error]:', message, context)
+            console.error('[ElevenLabs Error]:', message, context)
             setState('error')
             onError(message || 'Voice session error')
           },
@@ -86,7 +86,7 @@ export default function VoiceSession({ onComplete, onError, onCancel }: VoiceSes
 
         // Handle conversation end
         // The webhook will receive the full data, but we can also get some info here
-        // @ts-expect-error - 11Labs SDK types
+        // @ts-expect-error - ElevenLabs SDK types
         conversation.on('sessionEnded', () => {
           setState('complete')
           onComplete({})
@@ -112,7 +112,7 @@ export default function VoiceSession({ onComplete, onError, onCancel }: VoiceSes
     // Cleanup on unmount
     return () => {
       if (conversationRef.current) {
-        // @ts-expect-error - 11Labs SDK types
+        // @ts-expect-error - ElevenLabs SDK types
         conversationRef.current.endSession?.()
       }
     }

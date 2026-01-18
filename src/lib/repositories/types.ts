@@ -171,7 +171,7 @@ export interface FuzzyMatchResult {
 }
 
 /**
- * Result from 11Labs webhook containing parsed conversation data
+ * Result from ElevenLabs webhook containing parsed conversation data
  */
 export interface RoxyWebhookData {
   jobSite?: string

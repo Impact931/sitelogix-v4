@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 /**
- * Expected webhook payload from 11Labs Conversational AI
+ * Expected webhook payload from ElevenLabs Conversational AI
  * This structure comes from the Roxy agent after conversation completes.
  */
 interface ConversationWebhookPayload {
@@ -30,15 +30,15 @@ interface ConversationWebhookPayload {
 /**
  * POST /api/voice/webhook
  *
- * Receives completion data from 11Labs when a conversation ends.
- * This webhook is called by 11Labs to deliver the structured report data.
+ * Receives completion data from ElevenLabs when a conversation ends.
+ * This webhook is called by ElevenLabs to deliver the structured report data.
  */
 export async function POST(request: NextRequest) {
   try {
     // Log the raw request for debugging
     const payload = await request.json() as ConversationWebhookPayload
 
-    console.log('[Webhook] Received 11Labs callback:', {
+    console.log('[Webhook] Received ElevenLabs callback:', {
       conversation_id: payload.conversation_id,
       status: payload.status,
       hasTranscript: !!payload.transcript,
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[Webhook] Error processing webhook:', error)
 
-    // Return 200 anyway to prevent 11Labs from retrying
+    // Return 200 anyway to prevent ElevenLabs from retrying
     // Log the error for debugging
     return NextResponse.json({
       received: true,
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
  * GET /api/voice/webhook
  *
  * Health check for the webhook endpoint.
- * 11Labs may ping this to verify the endpoint is active.
+ * ElevenLabs may ping this to verify the endpoint is active.
  */
 export async function GET() {
   return NextResponse.json({

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 /**
  * POST /api/voice/session
  *
- * Creates a new 11Labs Conversational AI session.
+ * Creates a new ElevenLabs Conversational AI session.
  * Returns the signed URL for the frontend to connect to.
  */
 export async function POST(request: NextRequest) {
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     const agentId = process.env.ELEVEN_LABS_AGENT_ID
 
     if (!apiKey || !agentId) {
-      console.error('Missing 11Labs configuration:', {
+      console.error('Missing ElevenLabs configuration:', {
         hasApiKey: !!apiKey,
         hasAgentId: !!agentId
       })
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get the signed URL from 11Labs for the conversation
+    // Get the signed URL from ElevenLabs for the conversation
     const response = await fetch(
       `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
       {
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('11Labs API error:', response.status, errorText)
+      console.error('ElevenLabs API error:', response.status, errorText)
       return NextResponse.json(
         { error: 'Failed to initialize voice session' },
         { status: response.status }
