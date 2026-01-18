@@ -4,15 +4,22 @@
  * Implements ReportRepository interface using Google Sheets API.
  * Writes to "Main Report Log" and "Payroll Summary" tabs.
  *
- * Main Report Log Columns:
- * A: Timestamp | B: Job Site | C: Employee | D: Regular Hours | E: Overtime Hours
- * F: Deliveries (JSON) | G: Equipment (JSON) | H: Subcontractors (JSON)
- * I: Weather | J: Weather Impact | K: Safety (JSON) | L: Delays (JSON)
- * M: Work Performed (JSON) | N: Shortages | O: Notes
- * P: Audio URL | Q: Transcript URL | R: Report ID
+ * Main Report Log Columns (matching existing sheet):
+ * A: Timestamp | B: Job Site | C: Employee Name | D: Regular Hours | E: OT Hours
+ * F: Deliveries | G: Equipment | H: Incidents/Safety | I: Shortages
+ * J: Audio Link | K: Transcript Link | L: Weather | M: Delays | N: Notes
  */
 
-import type { DailyReport, ReportRepository } from '../../types'
+import type {
+  DailyReport,
+  ReportRepository,
+  Delivery,
+  Equipment,
+  SafetyEntry,
+  DelayEntry,
+  Subcontractor,
+  WorkEntry,
+} from '../../types'
 import { getSheetsClient, GOOGLE_CONFIG } from './auth'
 
 export class GoogleSheetsReportRepository implements ReportRepository {
@@ -26,40 +33,43 @@ export class GoogleSheetsReportRepository implements ReportRepository {
     const timestamp = this.formatTimestamp(report.submittedAt, report.timezone)
     const date = this.formatDate(report.submittedAt)
 
-    // Serialize arrays to JSON for storage
-    const deliveriesJson = this.serializeArray(report.deliveries)
-    const equipmentJson = this.serializeArray(report.equipment)
-    const subcontractorsJson = this.serializeArray(report.subcontractors)
-    const safetyJson = this.serializeArray(report.safety)
-    const delaysJson = this.serializeArray(report.delays)
-    const workPerformedJson = this.serializeArray(report.workPerformed)
+    // Format arrays as human-readable text for Google Sheets
+    const deliveriesText = this.formatDeliveries(report.deliveries)
+    const equipmentText = this.formatEquipment(report.equipment)
+    const safetyText = this.formatSafety(report.safety)
+    const delaysText = this.formatDelays(report.delays)
+    const subcontractorsText = this.formatSubcontractors(report.subcontractors)
+    const workText = this.formatWorkPerformed(report.workPerformed)
+
+    // Combine weather info
+    const weatherText = [report.weatherConditions, report.weatherImpact]
+      .filter(Boolean)
+      .join(' - ') || ''
 
     // Write to Main Report Log - one row per employee
-    // Report-level data is repeated for each employee row
     const mainLogRows = report.employees.map((emp) => [
       timestamp,                          // A: Timestamp
       report.jobSite || '',               // B: Job Site
       emp.normalizedName,                 // C: Employee Name
       emp.regularHours,                   // D: Regular Hours
-      emp.overtimeHours,                  // E: Overtime Hours
-      deliveriesJson,                     // F: Deliveries (JSON)
-      equipmentJson,                      // G: Equipment (JSON)
-      subcontractorsJson,                 // H: Subcontractors (JSON)
-      report.weatherConditions || '',     // I: Weather Conditions
-      report.weatherImpact || '',         // J: Weather Impact
-      safetyJson,                         // K: Safety (JSON)
-      delaysJson,                         // L: Delays (JSON)
-      workPerformedJson,                  // M: Work Performed (JSON)
-      report.shortages || '',             // N: Shortages
-      report.notes || '',                 // O: Notes
-      report.audioUrl || '',              // P: Audio URL
-      report.transcriptUrl || '',         // Q: Transcript URL
-      reportId,                           // R: Report ID
+      emp.overtimeHours,                  // E: OT Hours
+      deliveriesText,                     // F: Deliveries
+      equipmentText,                      // G: Equipment
+      safetyText,                         // H: Incidents/Safety
+      report.shortages || '',             // I: Shortages
+      report.audioUrl || '',              // J: Audio Link
+      report.transcriptUrl || '',         // K: Transcript Link
+      weatherText,                        // L: Weather
+      delaysText,                         // M: Delays
+      report.notes || '',                 // N: Notes
+      subcontractorsText,                 // O: Subcontractors
+      workText,                           // P: Work Performed
+      reportId,                           // Q: Report ID
     ])
 
     await this.sheets.spreadsheets.values.append({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A:R`,
+      range: `'${this.mainLogTab}'!A:Q`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: mainLogRows,
@@ -88,18 +98,114 @@ export class GoogleSheetsReportRepository implements ReportRepository {
     return reportId
   }
 
+  // ============================================
+  // FORMATTING HELPERS - Human-readable text
+  // ============================================
+
   /**
-   * Serialize an array to JSON string for storage
-   * Returns empty string if array is undefined or empty
+   * Format deliveries: "Ferguson: pipe (wrong size); ABC Supply: lumber"
    */
-  private serializeArray<T>(arr: T[] | undefined): string {
-    if (!arr || arr.length === 0) return ''
-    return JSON.stringify(arr)
+  private formatDeliveries(deliveries: Delivery[] | undefined): string {
+    if (!deliveries || deliveries.length === 0) return ''
+    return deliveries
+      .map((d) => {
+        let text = `${d.vendor}: ${d.material}`
+        if (d.quantity) text += ` (${d.quantity})`
+        if (d.notes) text += ` - ${d.notes}`
+        return text
+      })
+      .join('; ')
   }
 
   /**
-   * Parse a JSON string back to an array
-   * Returns empty array if string is empty or invalid
+   * Format equipment: "Excavator (4 hrs); Crane (2 hrs)"
+   */
+  private formatEquipment(equipment: Equipment[] | undefined): string {
+    if (!equipment || equipment.length === 0) return ''
+    return equipment
+      .map((e) => {
+        let text = e.name
+        if (e.hours) text += ` (${e.hours} hrs)`
+        if (e.notes) text += ` - ${e.notes}`
+        return text
+      })
+      .join('; ')
+  }
+
+  /**
+   * Format safety: "No incidents" or "Near miss: worker slipped; Hazard: loose railing"
+   */
+  private formatSafety(safety: SafetyEntry[] | undefined): string {
+    if (!safety || safety.length === 0) return ''
+
+    // Check if it's just a positive report
+    const positiveOnly = safety.every((s) => s.type === 'positive')
+    if (positiveOnly) {
+      return safety.map((s) => s.description).join('; ') || 'No incidents'
+    }
+
+    return safety
+      .map((s) => {
+        const typeLabel = s.type === 'near_miss' ? 'Near miss' :
+                         s.type.charAt(0).toUpperCase() + s.type.slice(1)
+        let text = `${typeLabel}: ${s.description}`
+        if (s.actionTaken) text += ` (Action: ${s.actionTaken})`
+        return text
+      })
+      .join('; ')
+  }
+
+  /**
+   * Format delays: "Rain delay (2 hrs) - lost productivity; Waiting on materials (1 hr)"
+   */
+  private formatDelays(delays: DelayEntry[] | undefined): string {
+    if (!delays || delays.length === 0) return ''
+    return delays
+      .map((d) => {
+        let text = d.reason
+        if (d.duration) text += ` (${d.duration})`
+        if (d.impact) text += ` - ${d.impact}`
+        return text
+      })
+      .join('; ')
+  }
+
+  /**
+   * Format subcontractors: "ABC Electric (3 workers) - wiring; XYZ Plumbing (2 workers)"
+   */
+  private formatSubcontractors(subs: Subcontractor[] | undefined): string {
+    if (!subs || subs.length === 0) return ''
+    return subs
+      .map((s) => {
+        let text = s.company
+        if (s.headcount) text += ` (${s.headcount} workers)`
+        if (s.trade) text += ` - ${s.trade}`
+        if (s.workPerformed) text += `: ${s.workPerformed}`
+        return text
+      })
+      .join('; ')
+  }
+
+  /**
+   * Format work performed: "Framing (Building A); Electrical rough-in (Building B)"
+   */
+  private formatWorkPerformed(work: WorkEntry[] | undefined): string {
+    if (!work || work.length === 0) return ''
+    return work
+      .map((w) => {
+        let text = w.description
+        if (w.area) text += ` (${w.area})`
+        return text
+      })
+      .join('; ')
+  }
+
+  // ============================================
+  // PARSING HELPERS - For reading back data
+  // ============================================
+
+  /**
+   * Parse a JSON string back to an array (for backward compatibility)
    */
   private parseArray<T>(json: string): T[] {
     if (!json || json.trim() === '') return []
