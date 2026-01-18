@@ -62,12 +62,15 @@ export default function VoiceSession({ onComplete, onError, onCancel }: VoiceSes
         const conversation = await Conversation.startSession({
           signedUrl,
           onConnect: () => {
+            console.log('[ElevenLabs] Connected to Roxy')
             setState('active')
             setStatusMessage('Roxy is listening...')
           },
           onDisconnect: () => {
-            setState('processing')
-            setStatusMessage('Processing your report...')
+            console.log('[ElevenLabs] Disconnected - session complete')
+            setState('complete')
+            setStatusMessage('Report submitted successfully!')
+            onComplete({})
           },
           onMessage: (message: { source: string; message: string }) => {
             console.log('[ElevenLabs Message]:', message)
@@ -83,14 +86,6 @@ export default function VoiceSession({ onComplete, onError, onCancel }: VoiceSes
         })
 
         conversationRef.current = conversation
-
-        // Handle conversation end
-        // The webhook will receive the full data, but we can also get some info here
-        // @ts-expect-error - ElevenLabs SDK types
-        conversation.on('sessionEnded', () => {
-          setState('complete')
-          onComplete({})
-        })
       } catch (err) {
         console.error('Session init error:', err)
         setState('error')
