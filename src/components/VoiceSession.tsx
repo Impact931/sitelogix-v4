@@ -55,8 +55,8 @@ export default function VoiceSession({ onComplete, onError, onCancel }: VoiceSes
         // Dynamically import ElevenLabs SDK (client-side only)
         const { Conversation } = await import('@elevenlabs/client')
 
-        // Request microphone permission
-        await navigator.mediaDevices.getUserMedia({ audio: true })
+        // Note: Microphone permission was already granted in page.tsx click handler
+        // This is required for iOS which needs permission from a user gesture
 
         // Start the conversation
         const conversation = await Conversation.startSession({

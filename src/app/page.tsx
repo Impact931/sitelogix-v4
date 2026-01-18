@@ -21,9 +21,24 @@ export default function Home() {
   const [state, setState] = useState<AppState>('idle')
   const [error, setError] = useState<string | null>(null)
 
-  const handleStartReport = () => {
-    setState('voice')
+  const handleStartReport = async () => {
     setError(null)
+
+    // Request microphone permission on user gesture (required for iOS)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Stop the stream immediately - we just needed permission
+      stream.getTracks().forEach(track => track.stop())
+      setState('voice')
+    } catch (err) {
+      console.error('Microphone permission error:', err)
+      if (err instanceof Error && err.name === 'NotAllowedError') {
+        setError('Microphone access denied. Please allow microphone access in your browser settings to use voice reporting.')
+      } else {
+        setError('Could not access microphone. Please check your device settings.')
+      }
+      setState('error')
+    }
   }
 
   const handleVoiceComplete = () => {
