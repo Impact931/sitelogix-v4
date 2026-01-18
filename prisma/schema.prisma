@@ -1,0 +1,73 @@
+// SiteLogix-v4 Prisma Schema
+// This schema supports the local PostgreSQL development environment
+// Production uses Google Sheets via the repository adapter pattern
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Employee reference table - source of truth for employee names
+model Employee {
+  id        String   @id @default(uuid())
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  reportEntries ReportEmployee[]
+
+  @@map("employees")
+}
+
+// Daily report submitted via Roxy voice conversation
+model Report {
+  id            String   @id @default(uuid())
+  submittedAt   DateTime @map("submitted_at")
+  timezone      String   @default("America/New_York")
+
+  // Report details
+  jobSite       String?  @map("job_site")
+  deliveries    String?
+  incidents     String?
+  shortages     String?
+
+  // File references
+  audioUrl      String?  @map("audio_url")
+  transcriptUrl String?  @map("transcript_url")
+
+  // Metadata
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  employees     ReportEmployee[]
+
+  @@map("reports")
+}
+
+// Junction table for employee hours per report
+model ReportEmployee {
+  id            String   @id @default(uuid())
+  reportId      String   @map("report_id")
+  employeeId    String   @map("employee_id")
+
+  // Hours worked
+  name          String   // Original name from voice (before normalization)
+  normalizedName String  @map("normalized_name") // Name after fuzzy matching
+  regularHours  Decimal  @map("regular_hours") @db.Decimal(4, 2)
+  overtimeHours Decimal  @map("overtime_hours") @db.Decimal(4, 2)
+  totalHours    Decimal  @map("total_hours") @db.Decimal(4, 2)
+
+  // Relations
+  report        Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  employee      Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([reportId, employeeId])
+  @@map("report_employees")
+}

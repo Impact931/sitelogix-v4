@@ -1,0 +1,57 @@
+{
+  "feature": "Feature Name Here",
+  "description": "Brief description of what this feature does and why it's needed",
+  "created": "YYYY-MM-DD",
+  "stories": [
+    {
+      "id": "STORY-001",
+      "title": "First story - usually foundational setup",
+      "description": "Detailed description of what this story accomplishes",
+      "acceptance_criteria": [
+        "Specific testable criterion 1",
+        "Specific testable criterion 2",
+        "Specific testable criterion 3"
+      ],
+      "priority": 1,
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "STORY-002",
+      "title": "Second story - builds on first",
+      "description": "Detailed description of what this story accomplishes",
+      "acceptance_criteria": [
+        "Specific testable criterion 1",
+        "Specific testable criterion 2"
+      ],
+      "priority": 2,
+      "dependencies": ["STORY-001"],
+      "passes": false
+    },
+    {
+      "id": "STORY-003",
+      "title": "Third story - can run in parallel with story 2",
+      "description": "Detailed description of what this story accomplishes",
+      "acceptance_criteria": [
+        "Specific testable criterion 1",
+        "Specific testable criterion 2"
+      ],
+      "priority": 2,
+      "dependencies": ["STORY-001"],
+      "passes": false
+    },
+    {
+      "id": "STORY-004",
+      "title": "Fourth story - depends on 2 and 3",
+      "description": "Detailed description of what this story accomplishes",
+      "acceptance_criteria": [
+        "Specific testable criterion 1",
+        "Specific testable criterion 2",
+        "Specific testable criterion 3"
+      ],
+      "priority": 3,
+      "dependencies": ["STORY-002", "STORY-003"],
+      "passes": false
+    }
+  ]
+}
