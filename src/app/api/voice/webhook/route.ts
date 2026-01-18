@@ -3,151 +3,86 @@ import { processReport, validateWebhookData } from '@/services/report-processor'
 import type { RoxyWebhookData } from '@/lib/repositories'
 
 /**
- * Expected webhook payload from ElevenLabs Conversational AI
- * This structure comes from the Roxy agent after conversation completes.
- */
-interface ConversationWebhookPayload {
-  conversation_id: string
-  agent_id: string
-  status: 'completed' | 'failed' | 'interrupted'
-  transcript?: string
-  audio_url?: string
-  data?: {
-    job_site?: string
-    employees?: Array<{
-      name: string
-      regular_hours: number
-      overtime_hours: number
-    }>
-    deliveries?: string
-    incidents?: string
-    shortages?: string
-  }
-  metadata?: {
-    duration_seconds?: number
-    timestamp?: string
-  }
-}
-
-/**
- * Transform ElevenLabs payload to RoxyWebhookData format
- */
-function transformPayload(payload: ConversationWebhookPayload): RoxyWebhookData | null {
-  if (!payload.data?.employees || payload.data.employees.length === 0) {
-    return null
-  }
-
-  return {
-    jobSite: payload.data.job_site,
-    employees: payload.data.employees.map((emp) => ({
-      name: emp.name,
-      regularHours: emp.regular_hours,
-      overtimeHours: emp.overtime_hours,
-    })),
-    deliveries: payload.data.deliveries,
-    incidents: payload.data.incidents,
-    shortages: payload.data.shortages,
-    timestamp: payload.metadata?.timestamp || new Date().toISOString(),
-    audioUrl: payload.audio_url,
-    transcript: payload.transcript,
-  }
-}
-
-/**
  * POST /api/voice/webhook
  *
- * Receives completion data from ElevenLabs when a conversation ends.
- * This webhook is called by ElevenLabs to deliver the structured report data.
+ * Receives report data from ElevenLabs Roxy agent.
+ * This is called as a "tool" during the conversation when Roxy
+ * has collected all the report information.
+ *
+ * The payload matches the submit_daily_report tool schema.
  */
 export async function POST(request: NextRequest) {
   try {
-    // Log the raw request for debugging
-    const payload = await request.json() as ConversationWebhookPayload
+    const payload = await request.json()
 
-    console.log('[Webhook] Received ElevenLabs callback:', {
-      conversation_id: payload.conversation_id,
-      status: payload.status,
-      hasTranscript: !!payload.transcript,
-      hasAudioUrl: !!payload.audio_url,
-      hasData: !!payload.data,
+    console.log('[Webhook] Received payload:', JSON.stringify(payload, null, 2))
+
+    // The payload comes directly from the ElevenLabs tool call
+    // It matches our RoxyWebhookData interface (snake_case from ElevenLabs)
+    const reportData: RoxyWebhookData = {
+      job_site: payload.job_site,
+      employees: payload.employees || [],
+      deliveries: payload.deliveries,
+      equipment: payload.equipment,
+      subcontractors: payload.subcontractors,
+      weather_conditions: payload.weather_conditions,
+      weather_impact: payload.weather_impact,
+      safety: payload.safety,
+      delays: payload.delays,
+      work_performed: payload.work_performed,
+      shortages: payload.shortages,
+      notes: payload.notes,
+      timestamp: new Date().toISOString(),
+    }
+
+    // Validate required fields
+    if (!validateWebhookData(reportData)) {
+      console.error('[Webhook] Invalid report data - validation failed')
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid report data - employees array is required',
+      })
+    }
+
+    console.log('[Webhook] Processing report:', {
+      jobSite: reportData.job_site,
+      employeeCount: reportData.employees.length,
+      deliveryCount: reportData.deliveries?.length || 0,
+      hasWeather: !!reportData.weather_conditions,
+      safetyCount: reportData.safety?.length || 0,
     })
 
-    // Validate the webhook (in production, verify signature)
-    // const signature = request.headers.get('x-elevenlabs-signature')
-    // TODO: Implement signature verification for production
+    // Process and save the report
+    const result = await processReport(reportData)
 
-    if (payload.status === 'failed') {
-      console.error('[Webhook] Conversation failed:', payload.conversation_id)
-      return NextResponse.json({ received: true, processed: false })
-    }
-
-    if (payload.status === 'interrupted') {
-      console.log('[Webhook] Conversation interrupted:', payload.conversation_id)
-      return NextResponse.json({ received: true, processed: false })
-    }
-
-    // Process completed conversation
-    if (payload.status === 'completed' && payload.data) {
-      console.log('[Webhook] Processing report data:', {
-        jobSite: payload.data.job_site,
-        employeeCount: payload.data.employees?.length || 0,
-      })
-
-      // Transform payload to our format
-      const reportData = transformPayload(payload)
-
-      if (!reportData || !validateWebhookData(reportData)) {
-        console.error('[Webhook] Invalid report data - missing employees')
-        return NextResponse.json({
-          received: true,
-          processed: false,
-          error: 'Invalid report data',
-        })
-      }
-
-      // Process and save the report
-      const result = await processReport(reportData)
-
-      if (!result.success) {
-        console.error('[Webhook] Report processing failed:', result.errors)
-        return NextResponse.json({
-          received: true,
-          processed: false,
-          errors: result.errors,
-        })
-      }
-
-      console.log('[Webhook] Report saved successfully:', {
-        reportId: result.reportId,
-        warnings: result.warnings,
-        employees: result.processedEmployees,
-      })
-
+    if (!result.success) {
+      console.error('[Webhook] Report processing failed:', result.errors)
       return NextResponse.json({
-        received: true,
-        processed: true,
-        conversation_id: payload.conversation_id,
-        reportId: result.reportId,
-        warnings: result.warnings,
+        success: false,
+        errors: result.errors,
+        message: 'Failed to save report',
       })
     }
 
-    // Completed but no data
+    console.log('[Webhook] Report saved successfully:', {
+      reportId: result.reportId,
+      warnings: result.warnings,
+    })
+
+    // Return success message for Roxy to read back
     return NextResponse.json({
-      received: true,
-      processed: false,
-      conversation_id: payload.conversation_id,
-      message: 'No report data to process',
+      success: true,
+      reportId: result.reportId,
+      message: `Report submitted successfully for ${reportData.job_site || 'the job site'}. ${reportData.employees.length} employees recorded.`,
+      warnings: result.warnings,
     })
   } catch (error) {
     console.error('[Webhook] Error processing webhook:', error)
 
-    // Return 200 anyway to prevent ElevenLabs from retrying
-    // Log the error for debugging
     return NextResponse.json({
-      received: true,
-      processed: false,
-      error: 'Processing error',
+      success: false,
+      error: 'Failed to process report',
+      message: 'There was an error saving your report. Please try again.',
     })
   }
 }
@@ -156,12 +91,11 @@ export async function POST(request: NextRequest) {
  * GET /api/voice/webhook
  *
  * Health check for the webhook endpoint.
- * ElevenLabs may ping this to verify the endpoint is active.
  */
 export async function GET() {
   return NextResponse.json({
     status: 'ok',
     endpoint: 'voice-webhook',
-    message: 'Ready to receive conversation callbacks',
+    message: 'Ready to receive daily reports from Roxy',
   })
 }

@@ -27,17 +27,78 @@ export interface EmployeeHours {
   totalHours: number
 }
 
+export interface Delivery {
+  vendorId?: string
+  vendor: string            // Original vendor name from voice
+  normalizedVendor: string  // Vendor name after fuzzy matching
+  material: string
+  quantity?: string
+  notes?: string
+}
+
+export interface Equipment {
+  name: string
+  hours?: number
+  notes?: string
+}
+
+export interface Subcontractor {
+  subcontractorId?: string
+  company: string           // Original company name from voice
+  normalizedCompany: string // Company name after fuzzy matching
+  trade?: string
+  headcount?: number
+  workPerformed?: string
+}
+
+export interface SafetyEntry {
+  type: 'incident' | 'near_miss' | 'hazard' | 'positive'
+  description: string
+  actionTaken?: string
+}
+
+export interface DelayEntry {
+  reason: string
+  duration?: string
+  impact?: string
+}
+
+export interface WorkEntry {
+  description: string
+  area?: string
+}
+
 export interface DailyReport {
   id?: string
   submittedAt: Date
   timezone: string
   jobSite?: string
+
+  // People
   employees: EmployeeHours[]
-  deliveries?: string
-  incidents?: string
+  subcontractors?: Subcontractor[]
+
+  // Materials & Equipment
+  deliveries?: Delivery[]
+  equipment?: Equipment[]
   shortages?: string
+
+  // Conditions
+  weatherConditions?: string
+  weatherImpact?: string
+
+  // Safety & Issues
+  safety?: SafetyEntry[]
+  delays?: DelayEntry[]
+
+  // Work Summary
+  workPerformed?: WorkEntry[]
+  notes?: string
+
+  // File references
   audioUrl?: string
   transcriptUrl?: string
+
   createdAt?: Date
   updatedAt?: Date
 }
@@ -172,18 +233,52 @@ export interface FuzzyMatchResult {
 
 /**
  * Result from ElevenLabs webhook containing parsed conversation data
+ * This matches the submit_daily_report tool schema in ElevenLabs
  */
 export interface RoxyWebhookData {
-  jobSite?: string
+  job_site?: string
   employees: Array<{
     name: string
-    regularHours: number
-    overtimeHours: number
+    regular_hours: number
+    overtime_hours: number
   }>
-  deliveries?: string
-  incidents?: string
+  deliveries?: Array<{
+    vendor: string
+    material: string
+    quantity?: string
+    notes?: string
+  }>
+  equipment?: Array<{
+    name: string
+    hours?: number
+    notes?: string
+  }>
+  subcontractors?: Array<{
+    company: string
+    trade?: string
+    headcount?: number
+    work_performed?: string
+  }>
+  weather_conditions?: string
+  weather_impact?: string
+  safety?: Array<{
+    type: string
+    description: string
+    action_taken?: string
+  }>
+  delays?: Array<{
+    reason: string
+    duration?: string
+    impact?: string
+  }>
+  work_performed?: Array<{
+    description: string
+    area?: string
+  }>
   shortages?: string
-  timestamp: string
+  notes?: string
+  // Metadata added by our system
+  timestamp?: string
   audioUrl?: string
   transcript?: string
 }

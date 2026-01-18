@@ -3,9 +3,16 @@
  *
  * Implements ReportRepository interface using Google Sheets API.
  * Writes to "Main Report Log" and "Payroll Summary" tabs.
+ *
+ * Main Report Log Columns:
+ * A: Timestamp | B: Job Site | C: Employee | D: Regular Hours | E: Overtime Hours
+ * F: Deliveries (JSON) | G: Equipment (JSON) | H: Subcontractors (JSON)
+ * I: Weather | J: Weather Impact | K: Safety (JSON) | L: Delays (JSON)
+ * M: Work Performed (JSON) | N: Shortages | O: Notes
+ * P: Audio URL | Q: Transcript URL | R: Report ID
  */
 
-import type { DailyReport, EmployeeHours, ReportRepository } from '../../types'
+import type { DailyReport, ReportRepository } from '../../types'
 import { getSheetsClient, GOOGLE_CONFIG } from './auth'
 
 export class GoogleSheetsReportRepository implements ReportRepository {
@@ -19,23 +26,40 @@ export class GoogleSheetsReportRepository implements ReportRepository {
     const timestamp = this.formatTimestamp(report.submittedAt, report.timezone)
     const date = this.formatDate(report.submittedAt)
 
+    // Serialize arrays to JSON for storage
+    const deliveriesJson = this.serializeArray(report.deliveries)
+    const equipmentJson = this.serializeArray(report.equipment)
+    const subcontractorsJson = this.serializeArray(report.subcontractors)
+    const safetyJson = this.serializeArray(report.safety)
+    const delaysJson = this.serializeArray(report.delays)
+    const workPerformedJson = this.serializeArray(report.workPerformed)
+
     // Write to Main Report Log - one row per employee
+    // Report-level data is repeated for each employee row
     const mainLogRows = report.employees.map((emp) => [
-      timestamp,
-      report.jobSite || '',
-      emp.normalizedName,
-      emp.regularHours,
-      emp.overtimeHours,
-      report.deliveries || '',
-      report.incidents || '',
-      report.shortages || '',
-      report.audioUrl || '',
-      report.transcriptUrl || '',
+      timestamp,                          // A: Timestamp
+      report.jobSite || '',               // B: Job Site
+      emp.normalizedName,                 // C: Employee Name
+      emp.regularHours,                   // D: Regular Hours
+      emp.overtimeHours,                  // E: Overtime Hours
+      deliveriesJson,                     // F: Deliveries (JSON)
+      equipmentJson,                      // G: Equipment (JSON)
+      subcontractorsJson,                 // H: Subcontractors (JSON)
+      report.weatherConditions || '',     // I: Weather Conditions
+      report.weatherImpact || '',         // J: Weather Impact
+      safetyJson,                         // K: Safety (JSON)
+      delaysJson,                         // L: Delays (JSON)
+      workPerformedJson,                  // M: Work Performed (JSON)
+      report.shortages || '',             // N: Shortages
+      report.notes || '',                 // O: Notes
+      report.audioUrl || '',              // P: Audio URL
+      report.transcriptUrl || '',         // Q: Transcript URL
+      reportId,                           // R: Report ID
     ])
 
     await this.sheets.spreadsheets.values.append({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A:J`,
+      range: `'${this.mainLogTab}'!A:R`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: mainLogRows,
@@ -45,6 +69,7 @@ export class GoogleSheetsReportRepository implements ReportRepository {
     // Write to Payroll Summary - one row per employee
     const payrollRows = report.employees.map((emp) => [
       date,
+      report.jobSite || '',
       emp.normalizedName,
       emp.regularHours,
       emp.overtimeHours,
@@ -53,7 +78,7 @@ export class GoogleSheetsReportRepository implements ReportRepository {
 
     await this.sheets.spreadsheets.values.append({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.payrollTab}'!A:E`,
+      range: `'${this.payrollTab}'!A:F`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: payrollRows,
@@ -61,6 +86,28 @@ export class GoogleSheetsReportRepository implements ReportRepository {
     })
 
     return reportId
+  }
+
+  /**
+   * Serialize an array to JSON string for storage
+   * Returns empty string if array is undefined or empty
+   */
+  private serializeArray<T>(arr: T[] | undefined): string {
+    if (!arr || arr.length === 0) return ''
+    return JSON.stringify(arr)
+  }
+
+  /**
+   * Parse a JSON string back to an array
+   * Returns empty array if string is empty or invalid
+   */
+  private parseArray<T>(json: string): T[] {
+    if (!json || json.trim() === '') return []
+    try {
+      return JSON.parse(json)
+    } catch {
+      return []
+    }
   }
 
   async getReportById(id: string): Promise<DailyReport | null> {
@@ -74,12 +121,12 @@ export class GoogleSheetsReportRepository implements ReportRepository {
   async getReportsByDateRange(start: Date, end: Date): Promise<DailyReport[]> {
     const response = await this.sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A2:J`,
+      range: `'${this.mainLogTab}'!A2:R`,
     })
 
     const rows = response.data.values || []
 
-    // Group rows by timestamp to reconstruct reports
+    // Group rows by report ID (column R) to reconstruct reports
     const reportMap = new Map<string, DailyReport>()
 
     for (const row of rows) {
@@ -87,20 +134,28 @@ export class GoogleSheetsReportRepository implements ReportRepository {
 
       if (timestamp < start || timestamp > end) continue
 
-      const key = row[0] // Use timestamp as grouping key
+      // Use Report ID (column R, index 17) as grouping key, fallback to timestamp
+      const key = row[17] || row[0]
 
       if (!reportMap.has(key)) {
         reportMap.set(key, {
           id: key,
           submittedAt: timestamp,
-          timezone: 'America/New_York', // Default
+          timezone: 'America/New_York',
           jobSite: row[1] || undefined,
           employees: [],
-          deliveries: row[5] || undefined,
-          incidents: row[6] || undefined,
-          shortages: row[7] || undefined,
-          audioUrl: row[8] || undefined,
-          transcriptUrl: row[9] || undefined,
+          deliveries: this.parseArray(row[5]),
+          equipment: this.parseArray(row[6]),
+          subcontractors: this.parseArray(row[7]),
+          weatherConditions: row[8] || undefined,
+          weatherImpact: row[9] || undefined,
+          safety: this.parseArray(row[10]),
+          delays: this.parseArray(row[11]),
+          workPerformed: this.parseArray(row[12]),
+          shortages: row[13] || undefined,
+          notes: row[14] || undefined,
+          audioUrl: row[15] || undefined,
+          transcriptUrl: row[16] || undefined,
         })
       }
 
