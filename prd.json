@@ -1,0 +1,222 @@
+{
+  "feature": "SiteLogix-v4 Core Voice Flow",
+  "description": "Voice-first daily reporting PWA for Parkway Construction field managers. Users install app to home screen, talk to Roxy (AI voice agent), and submit daily reports that flow to Google Sheets with email notifications.",
+  "created": "2026-01-18",
+  "phases": {
+    "phase_0": {
+      "name": "Foundation & Setup",
+      "status": "completed",
+      "description": "GitHub repo, Next.js 15, Docker PostgreSQL, Prisma ORM, Repository Pattern, Google Workspace config, AWS Amplify setup"
+    },
+    "phase_1": {
+      "name": "Core Voice Flow",
+      "status": "in_progress"
+    },
+    "phase_2": {
+      "name": "Data Processing & Storage",
+      "status": "pending"
+    },
+    "phase_3": {
+      "name": "Email Notifications",
+      "status": "pending"
+    },
+    "phase_4": {
+      "name": "Production Deployment & Testing",
+      "status": "pending"
+    }
+  },
+  "stories": [
+    {
+      "id": "P1-001",
+      "title": "Create main page layout with Start Report button",
+      "description": "Build the landing page that users see when they open the PWA. Should have a prominent 'Start Daily Report' button, SiteLogix branding, and be optimized for mobile viewport.",
+      "acceptance_criteria": [
+        "Page renders at route '/' without errors",
+        "Large 'Start Daily Report' button is visible and centered",
+        "SiteLogix title/branding is displayed",
+        "Layout is centered and readable on 375px mobile viewport",
+        "Button has hover/active states for touch feedback"
+      ],
+      "priority": 1,
+      "dependencies": [],
+      "passes": false,
+      "phase": "1.1"
+    },
+    {
+      "id": "P1-002",
+      "title": "Implement responsive mobile-first design",
+      "description": "Ensure the app looks good on all mobile devices. Use Tailwind CSS for styling with mobile-first approach.",
+      "acceptance_criteria": [
+        "No horizontal scroll on mobile devices (320px-428px width)",
+        "Text is readable without zooming (min 16px body text)",
+        "Touch targets are minimum 44x44 pixels",
+        "Proper padding/margins on all screen sizes",
+        "Safe area insets respected for notched phones"
+      ],
+      "priority": 2,
+      "dependencies": ["P1-001"],
+      "passes": false,
+      "phase": "1.1"
+    },
+    {
+      "id": "P1-003",
+      "title": "Add loading and error UI states",
+      "description": "Create loading spinner and error message components for use throughout the app. These will be used during API calls and voice sessions.",
+      "acceptance_criteria": [
+        "Loading spinner component exists at src/components/Loading.tsx",
+        "Error display component exists at src/components/ErrorMessage.tsx",
+        "Loading spinner is visible and animated",
+        "Error message shows red text with dismiss option",
+        "Components are exported and can be imported"
+      ],
+      "priority": 2,
+      "dependencies": ["P1-001"],
+      "passes": false,
+      "phase": "1.1"
+    },
+    {
+      "id": "P1-004",
+      "title": "Verify PWA manifest configuration",
+      "description": "Ensure manifest.json is correctly configured for home screen installation on iOS and Android.",
+      "acceptance_criteria": [
+        "manifest.json exists at public/manifest.json",
+        "manifest has name='SiteLogix' and short_name='SiteLogix'",
+        "manifest has display='standalone'",
+        "manifest references all required icons (192x192, 512x512)",
+        "manifest is linked in HTML head via layout.tsx"
+      ],
+      "priority": 2,
+      "dependencies": [],
+      "passes": false,
+      "phase": "1.1"
+    },
+    {
+      "id": "P1-005",
+      "title": "Create API route for 11Labs session initiation",
+      "description": "Build the API endpoint that creates a new conversation session with 11Labs. This will return the session details needed for the frontend to connect.",
+      "acceptance_criteria": [
+        "API route exists at src/app/api/voice/session/route.ts",
+        "POST request creates new 11Labs conversation session",
+        "Response includes session_id and connection details",
+        "Error handling returns appropriate HTTP status codes",
+        "11Labs credentials are read from environment variables"
+      ],
+      "priority": 1,
+      "dependencies": ["P1-001"],
+      "passes": false,
+      "phase": "1.2"
+    },
+    {
+      "id": "P1-006",
+      "title": "Create voice conversation UI component",
+      "description": "Build the UI component that displays during a voice conversation with Roxy. Shows conversation status, provides visual feedback, and handles session states.",
+      "acceptance_criteria": [
+        "VoiceSession component exists at src/components/VoiceSession.tsx",
+        "Shows 'Connecting...' state when starting",
+        "Shows active state with audio visualization or indicator",
+        "Shows 'Processing...' state when conversation ends",
+        "Has 'End Call' button to terminate session early"
+      ],
+      "priority": 2,
+      "dependencies": ["P1-005"],
+      "passes": false,
+      "phase": "1.2"
+    },
+    {
+      "id": "P1-007",
+      "title": "Integrate 11Labs Conversational AI widget",
+      "description": "Connect the frontend to 11Labs using their browser SDK or WebSocket API. Handle the conversation lifecycle from start to finish.",
+      "acceptance_criteria": [
+        "Clicking 'Start Report' initiates 11Labs session via API",
+        "Frontend establishes WebSocket connection to 11Labs",
+        "User can speak and receive voice responses from Roxy",
+        "Conversation state is tracked (idle, active, complete)",
+        "Session is properly cleaned up when conversation ends"
+      ],
+      "priority": 1,
+      "dependencies": ["P1-005", "P1-006"],
+      "passes": false,
+      "phase": "1.2"
+    },
+    {
+      "id": "P1-008",
+      "title": "Create webhook endpoint for 11Labs completion data",
+      "description": "Build the API endpoint that receives structured data from 11Labs when a conversation completes. This webhook will be called by 11Labs with the report data extracted from the conversation.",
+      "acceptance_criteria": [
+        "API route exists at src/app/api/voice/webhook/route.ts",
+        "POST endpoint accepts JSON payload from 11Labs",
+        "Validates webhook signature for security",
+        "Logs received payload for debugging",
+        "Returns 200 OK on successful receipt"
+      ],
+      "priority": 2,
+      "dependencies": ["P1-005"],
+      "passes": false,
+      "phase": "1.2"
+    },
+    {
+      "id": "P1-009",
+      "title": "Handle conversation completion flow",
+      "description": "When 11Labs conversation completes, show success UI to user and prepare for data processing.",
+      "acceptance_criteria": [
+        "UI shows 'Report Submitted' success message after conversation",
+        "Success message displays within 2 seconds of conversation end",
+        "User can start a new report from success screen",
+        "Report summary is displayed if available from webhook",
+        "Error handling shows failure message if submission fails"
+      ],
+      "priority": 2,
+      "dependencies": ["P1-007", "P1-008"],
+      "passes": false,
+      "phase": "1.2"
+    },
+    {
+      "id": "P1-010",
+      "title": "Test PWA installation on iOS Safari",
+      "description": "Verify the app can be installed to iOS home screen and works in standalone mode.",
+      "acceptance_criteria": [
+        "App can be added to home screen via Safari Share menu",
+        "Home screen icon appears with correct image",
+        "Tapping icon opens app in standalone mode (no Safari UI)",
+        "App fills entire screen with proper safe area handling",
+        "App name shows as 'SiteLogix' on home screen"
+      ],
+      "priority": 3,
+      "dependencies": ["P1-004", "P1-007"],
+      "passes": false,
+      "phase": "1.3"
+    },
+    {
+      "id": "P1-011",
+      "title": "Test PWA installation on Android Chrome",
+      "description": "Verify the app can be installed to Android home screen and works in standalone mode.",
+      "acceptance_criteria": [
+        "Chrome shows 'Add to Home screen' prompt or option",
+        "Home screen icon appears with correct image",
+        "Tapping icon opens app in standalone mode (no Chrome UI)",
+        "App fills entire screen appropriately",
+        "Splash screen shows during launch"
+      ],
+      "priority": 3,
+      "dependencies": ["P1-004", "P1-007"],
+      "passes": false,
+      "phase": "1.3"
+    },
+    {
+      "id": "P1-012",
+      "title": "End-to-end voice conversation test",
+      "description": "Complete a full conversation with Roxy on the deployed staging site. Verify data flows correctly through the webhook.",
+      "acceptance_criteria": [
+        "Can start conversation from deployed Amplify URL",
+        "Roxy asks about job site, employees, hours",
+        "Roxy reads back summary for confirmation",
+        "Conversation completes and webhook receives data",
+        "Success screen shows after conversation"
+      ],
+      "priority": 3,
+      "dependencies": ["P1-009", "P1-010", "P1-011"],
+      "passes": false,
+      "phase": "1.3"
+    }
+  ]
+}

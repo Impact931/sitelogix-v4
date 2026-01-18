@@ -24,3 +24,22 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* PWA Safe Area Support for notched devices */
+.safe-area-inset {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Prevent pull-to-refresh in PWA mode */
+html {
+  overscroll-behavior: none;
+}
+
+/* Ensure touch targets are accessible */
+button, a {
+  min-height: 44px;
+  min-width: 44px;
+}

@@ -7,11 +7,11 @@
  * - Typos (Corey vs Cory)
  */
 
-import Fuse from 'fuse.js'
+import Fuse, { IFuseOptions } from 'fuse.js'
 import type { Employee, FuzzyMatchResult } from '../types'
 
 // Fuse.js configuration optimized for name matching
-const FUSE_OPTIONS: Fuse.IFuseOptions<Employee> = {
+const FUSE_OPTIONS: IFuseOptions<Employee> = {
   keys: ['name'],
   threshold: 0.4,        // Lower = stricter matching (0.0 = exact, 1.0 = match anything)
   distance: 100,         // How far to search for pattern

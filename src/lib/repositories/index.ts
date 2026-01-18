@@ -61,7 +61,7 @@ export function getEmployeeRepository(): EmployeeRepository {
       const { PostgresEmployeeRepository } = require('./adapters/postgres')
       postgresEmployeeRepo = new PostgresEmployeeRepository()
     }
-    return postgresEmployeeRepo
+    return postgresEmployeeRepo!
   }
 
   // Default to Google
@@ -69,7 +69,7 @@ export function getEmployeeRepository(): EmployeeRepository {
     const { GoogleSheetsEmployeeRepository } = require('./adapters/google')
     googleEmployeeRepo = new GoogleSheetsEmployeeRepository()
   }
-  return googleEmployeeRepo
+  return googleEmployeeRepo!
 }
 
 /**
@@ -86,7 +86,7 @@ export function getReportRepository(): ReportRepository {
       const { PostgresReportRepository } = require('./adapters/postgres')
       postgresReportRepo = new PostgresReportRepository()
     }
-    return postgresReportRepo
+    return postgresReportRepo!
   }
 
   // Default to Google
@@ -94,7 +94,7 @@ export function getReportRepository(): ReportRepository {
     const { GoogleSheetsReportRepository } = require('./adapters/google')
     googleReportRepo = new GoogleSheetsReportRepository()
   }
-  return googleReportRepo
+  return googleReportRepo!
 }
 
 /**
@@ -112,7 +112,7 @@ export function getFileRepository(): FileRepository {
       const { LocalFileRepository } = require('./adapters/postgres')
       localFileRepo = new LocalFileRepository()
     }
-    return localFileRepo
+    return localFileRepo!
   }
 
   if (adapter === 's3') {
@@ -125,7 +125,7 @@ export function getFileRepository(): FileRepository {
     const { GoogleDriveFileRepository } = require('./adapters/google')
     googleFileRepo = new GoogleDriveFileRepository()
   }
-  return googleFileRepo
+  return googleFileRepo!
 }
 
 /**

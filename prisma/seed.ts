@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Employee } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
@@ -63,7 +63,7 @@ async function main() {
       incidents: null,
       shortages: 'Need more drywall screws',
       employees: {
-        create: sampleEmployees.map((emp, index) => ({
+        create: sampleEmployees.map((emp: Employee, index: number) => ({
           employeeId: emp.id,
           name: emp.name,
           normalizedName: emp.name,
