@@ -92,14 +92,14 @@
     },
     {
       "id": "P1-005",
-      "title": "Create API route for 11Labs session initiation",
-      "description": "Build the API endpoint that creates a new conversation session with 11Labs. This will return the session details needed for the frontend to connect.",
+      "title": "Create API route for ElevenLabs session initiation",
+      "description": "Build the API endpoint that creates a new conversation session with ElevenLabs. This will return the session details needed for the frontend to connect.",
       "acceptance_criteria": [
         "API route exists at src/app/api/voice/session/route.ts",
-        "POST request creates new 11Labs conversation session",
+        "POST request creates new ElevenLabs conversation session",
         "Response includes session_id and connection details",
         "Error handling returns appropriate HTTP status codes",
-        "11Labs credentials are read from environment variables"
+        "ElevenLabs credentials are read from environment variables"
       ],
       "priority": 1,
       "dependencies": ["P1-001"],
@@ -124,11 +124,11 @@
     },
     {
       "id": "P1-007",
-      "title": "Integrate 11Labs Conversational AI widget",
-      "description": "Connect the frontend to 11Labs using their browser SDK or WebSocket API. Handle the conversation lifecycle from start to finish.",
+      "title": "Integrate ElevenLabs Conversational AI widget",
+      "description": "Connect the frontend to ElevenLabs using their browser SDK or WebSocket API. Handle the conversation lifecycle from start to finish.",
       "acceptance_criteria": [
-        "Clicking 'Start Report' initiates 11Labs session via API",
-        "Frontend establishes WebSocket connection to 11Labs",
+        "Clicking 'Start Report' initiates ElevenLabs session via API",
+        "Frontend establishes WebSocket connection to ElevenLabs",
         "User can speak and receive voice responses from Roxy",
         "Conversation state is tracked (idle, active, complete)",
         "Session is properly cleaned up when conversation ends"
@@ -140,11 +140,11 @@
     },
     {
       "id": "P1-008",
-      "title": "Create webhook endpoint for 11Labs completion data",
-      "description": "Build the API endpoint that receives structured data from 11Labs when a conversation completes. This webhook will be called by 11Labs with the report data extracted from the conversation.",
+      "title": "Create webhook endpoint for ElevenLabs completion data",
+      "description": "Build the API endpoint that receives structured data from ElevenLabs when a conversation completes. This webhook will be called by ElevenLabs with the report data extracted from the conversation.",
       "acceptance_criteria": [
         "API route exists at src/app/api/voice/webhook/route.ts",
-        "POST endpoint accepts JSON payload from 11Labs",
+        "POST endpoint accepts JSON payload from ElevenLabs",
         "Validates webhook signature for security",
         "Logs received payload for debugging",
         "Returns 200 OK on successful receipt"
@@ -157,7 +157,7 @@
     {
       "id": "P1-009",
       "title": "Handle conversation completion flow",
-      "description": "When 11Labs conversation completes, show success UI to user and prepare for data processing.",
+      "description": "When ElevenLabs conversation completes, show success UI to user and prepare for data processing.",
       "acceptance_criteria": [
         "UI shows 'Report Submitted' success message after conversation",
         "Success message displays within 2 seconds of conversation end",
