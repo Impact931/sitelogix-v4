@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { processReport, validateWebhookData } from '@/services/report-processor'
+import type { RoxyWebhookData } from '@/lib/repositories'
 
 /**
  * Expected webhook payload from ElevenLabs Conversational AI
@@ -24,6 +26,30 @@ interface ConversationWebhookPayload {
   metadata?: {
     duration_seconds?: number
     timestamp?: string
+  }
+}
+
+/**
+ * Transform ElevenLabs payload to RoxyWebhookData format
+ */
+function transformPayload(payload: ConversationWebhookPayload): RoxyWebhookData | null {
+  if (!payload.data?.employees || payload.data.employees.length === 0) {
+    return null
+  }
+
+  return {
+    jobSite: payload.data.job_site,
+    employees: payload.data.employees.map((emp) => ({
+      name: emp.name,
+      regularHours: emp.regular_hours,
+      overtimeHours: emp.overtime_hours,
+    })),
+    deliveries: payload.data.deliveries,
+    incidents: payload.data.incidents,
+    shortages: payload.data.shortages,
+    timestamp: payload.metadata?.timestamp || new Date().toISOString(),
+    audioUrl: payload.audio_url,
+    transcript: payload.transcript,
   }
 }
 
@@ -67,22 +93,51 @@ export async function POST(request: NextRequest) {
         employeeCount: payload.data.employees?.length || 0,
       })
 
-      // TODO: Phase 2 - Process and save the report
-      // 1. Normalize employee names against reference
-      // 2. Calculate total hours
-      // 3. Save to repository (Google Sheets or PostgreSQL)
-      // 4. Upload audio and transcript files
-      // 5. Send email notification
+      // Transform payload to our format
+      const reportData = transformPayload(payload)
 
-      // For now, just log the data
-      console.log('[Webhook] Report data:', JSON.stringify(payload.data, null, 2))
+      if (!reportData || !validateWebhookData(reportData)) {
+        console.error('[Webhook] Invalid report data - missing employees')
+        return NextResponse.json({
+          received: true,
+          processed: false,
+          error: 'Invalid report data',
+        })
+      }
+
+      // Process and save the report
+      const result = await processReport(reportData)
+
+      if (!result.success) {
+        console.error('[Webhook] Report processing failed:', result.errors)
+        return NextResponse.json({
+          received: true,
+          processed: false,
+          errors: result.errors,
+        })
+      }
+
+      console.log('[Webhook] Report saved successfully:', {
+        reportId: result.reportId,
+        warnings: result.warnings,
+        employees: result.processedEmployees,
+      })
+
+      return NextResponse.json({
+        received: true,
+        processed: true,
+        conversation_id: payload.conversation_id,
+        reportId: result.reportId,
+        warnings: result.warnings,
+      })
     }
 
-    // Always return 200 to acknowledge receipt
+    // Completed but no data
     return NextResponse.json({
       received: true,
-      processed: true,
-      conversation_id: payload.conversation_id
+      processed: false,
+      conversation_id: payload.conversation_id,
+      message: 'No report data to process',
     })
   } catch (error) {
     console.error('[Webhook] Error processing webhook:', error)
@@ -92,7 +147,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       received: true,
       processed: false,
-      error: 'Processing error'
+      error: 'Processing error',
     })
   }
 }
