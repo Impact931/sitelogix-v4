@@ -10,7 +10,6 @@
  */
 
 import {
-  getEmployeeRepository,
   getReportRepository,
   type DailyReport,
   type EmployeeHours,
@@ -44,59 +43,28 @@ export async function processReport(data: RoxyWebhookData): Promise<ProcessingRe
   const processedEmployees: ProcessingResult['processedEmployees'] = []
 
   try {
-    const employeeRepo = getEmployeeRepository()
     const reportRepo = getReportRepository()
 
-    // Get all active employees for fuzzy matching (non-fatal if fails)
-    let activeEmployees: Awaited<ReturnType<typeof employeeRepo.getAllActive>> = []
-    try {
-      activeEmployees = await employeeRepo.getAllActive()
-      if (activeEmployees.length === 0) {
-        warnings.push('No active employees found in reference list. Using original names.')
-      }
-    } catch (empError) {
-      console.warn('[ReportProcessor] Could not load employee reference:', empError)
-      warnings.push('Could not access Employee Reference tab. Using original names.')
-    }
+    // Process employees - just use the names as given by Roxy
+    const employeeHours: EmployeeHours[] = data.employees.map((emp) => {
+      const regularHours = Number(emp.regular_hours) || 0
+      const overtimeHours = Number(emp.overtime_hours) || 0
+      const totalHours = regularHours + overtimeHours
 
-    // Process employees with fuzzy matching
-    const employeeHours: EmployeeHours[] = await Promise.all(
-      data.employees.map(async (emp) => {
-        const regularHours = Number(emp.regular_hours) || 0
-        const overtimeHours = Number(emp.overtime_hours) || 0
-        const totalHours = regularHours + overtimeHours
-
-        let normalizedName = emp.name
-        let employeeId: string | undefined
-        let matched = false
-
-        if (activeEmployees.length > 0) {
-          const matchedEmployee = await employeeRepo.fuzzyMatch(emp.name, 0.6)
-          if (matchedEmployee) {
-            normalizedName = matchedEmployee.name
-            employeeId = matchedEmployee.id
-            matched = true
-          } else {
-            warnings.push(`No match found for employee "${emp.name}" - using original name`)
-          }
-        }
-
-        processedEmployees.push({
-          original: emp.name,
-          normalized: normalizedName,
-          matched,
-        })
-
-        return {
-          employeeId,
-          name: emp.name,
-          normalizedName,
-          regularHours,
-          overtimeHours,
-          totalHours,
-        }
+      processedEmployees.push({
+        original: emp.name,
+        normalized: emp.name,
+        matched: true,
       })
-    )
+
+      return {
+        name: emp.name,
+        normalizedName: emp.name,
+        regularHours,
+        overtimeHours,
+        totalHours,
+      }
+    })
 
     // Process deliveries (future: fuzzy match vendors)
     const deliveries: Delivery[] | undefined = data.deliveries?.map((d) => ({
