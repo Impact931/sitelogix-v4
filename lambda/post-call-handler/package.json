@@ -1,0 +1,9 @@
+{
+  "name": "roxy-post-call-handler",
+  "version": "1.0.0",
+  "description": "Lambda function to handle ElevenLabs post-call webhook",
+  "main": "index.js",
+  "dependencies": {
+    "googleapis": "^126.0.0"
+  }
+}
