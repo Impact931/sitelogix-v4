@@ -192,6 +192,14 @@ export interface FileRepository {
   uploadAudio(buffer: Buffer, filename: string): Promise<string>
 
   /**
+   * Download audio from a URL and upload to storage
+   * @param url - The URL to download from (e.g., ElevenLabs recording URL)
+   * @param filename - The filename to use
+   * @returns The public URL of the uploaded file
+   */
+  uploadAudioFromUrl(url: string, filename: string): Promise<string>
+
+  /**
    * Upload a transcript file
    * @param content - The transcript content (JSON or text)
    * @param filename - The filename to use
@@ -281,4 +289,29 @@ export interface RoxyWebhookData {
   timestamp?: string
   audioUrl?: string
   transcript?: string
+}
+
+/**
+ * ElevenLabs Post-Call Webhook Payload
+ * Sent after a conversation ends with transcript and audio data
+ */
+export interface ElevenLabsPostCallPayload {
+  conversation_id: string
+  agent_id: string
+  call_duration_secs?: number
+  status: 'done' | 'failed' | 'timeout'
+  transcript?: ElevenLabsTranscriptEntry[]
+  metadata?: Record<string, unknown>
+  analysis?: {
+    call_successful?: boolean
+    transcript_summary?: string
+  }
+  // Audio URL is only included if send_audio is enabled
+  recording_url?: string
+}
+
+export interface ElevenLabsTranscriptEntry {
+  role: 'user' | 'agent'
+  message: string
+  time_in_call_secs?: number
 }

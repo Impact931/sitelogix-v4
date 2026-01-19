@@ -70,9 +70,9 @@ export const GOOGLE_CONFIG = {
   // Parkway Database Drive Folder
   DRIVE_FOLDER_ID: process.env.GOOGLE_DRIVE_FOLDER_ID || '1UFwgLhlBdgdK8As2EmzW-nHNreHsYeqm',
 
-  // Subfolder names (will be created if they don't exist)
-  DRIVE_SUBFOLDERS: {
-    AUDIO: 'Parkway Audio Recordings',
-    TRANSCRIPTS: 'Parkway Transcripts',
+  // Specific subfolder IDs (pre-created in Google Drive)
+  DRIVE_FOLDERS: {
+    AUDIO: process.env.GOOGLE_DRIVE_AUDIO_FOLDER_ID || '1QfnjfPbsGCJDSDH04o7nqwl0TiRosXD7',
+    TRANSCRIPTS: process.env.GOOGLE_DRIVE_TRANSCRIPTS_FOLDER_ID || '1mTBMlD7ksiJSu9Qh-vnjjPB6hGIiaArf',
   },
 }

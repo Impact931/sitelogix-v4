@@ -14,7 +14,8 @@
     },
     "phase_2": {
       "name": "Data Processing & Storage",
-      "status": "pending"
+      "status": "completed",
+      "description": "Process webhook data, normalize employee names via fuzzy matching, save reports to Google Sheets, post-call transcript handling"
     },
     "phase_3": {
       "name": "Email Notifications",
@@ -218,6 +219,105 @@
       "passes": true,
       "notes": "Voice connection works. User can talk to Roxy. Agent response configuration is handled in ElevenLabs platform.",
       "phase": "1.3"
+    },
+    {
+      "id": "P2-001",
+      "title": "Ensure all Google Sheets columns output consistently",
+      "description": "Fix issue where empty fields compress columns. All 17 columns (A-Q) should always be output, even when values are empty strings.",
+      "acceptance_criteria": [
+        "All 17 columns are written for every row, even if empty",
+        "Empty optional fields show as blank cells, not missing columns",
+        "Column alignment remains consistent across all reports",
+        "Test with report that has minimal data (just employees)"
+      ],
+      "priority": 1,
+      "dependencies": ["P1-012"],
+      "passes": true,
+      "notes": "Code already outputs all 17 columns with empty strings for missing values. Format functions all return string type.",
+      "phase": "2.1"
+    },
+    {
+      "id": "P2-002",
+      "title": "Create post-call webhook endpoint for ElevenLabs",
+      "description": "Build API endpoint that receives the post-call webhook from ElevenLabs containing conversation transcript and audio URL. This fires after the conversation ends.",
+      "acceptance_criteria": [
+        "API route exists at src/app/api/voice/post-call/route.ts",
+        "POST endpoint accepts ElevenLabs post-call payload",
+        "Extracts conversation_id, transcript, and audio_url from payload",
+        "Logs received data for debugging",
+        "Returns 200 OK on successful receipt"
+      ],
+      "priority": 1,
+      "dependencies": ["P2-001"],
+      "passes": true,
+      "notes": "Endpoint created with ElevenLabsPostCallPayload type. Logs transcript and routes for debugging. Ready for P2-003 file upload integration.",
+      "phase": "2.2"
+    },
+    {
+      "id": "P2-003",
+      "title": "Implement Google Drive file upload service",
+      "description": "Create service to upload audio files and transcript documents to Google Drive in the Parkway Database folder.",
+      "acceptance_criteria": [
+        "FileAdapter interface has uploadAudio and uploadTranscript methods",
+        "GoogleDriveFileAdapter implements both methods",
+        "Audio files uploaded to 'Parkway Audio Recordings' subfolder",
+        "Transcripts uploaded to 'Parkway Transcripts' subfolder",
+        "Returns shareable Google Drive URLs"
+      ],
+      "priority": 1,
+      "dependencies": ["P2-002"],
+      "passes": true,
+      "notes": "GoogleDriveFileRepository already implements full file upload with auto-folder creation and shareable links.",
+      "phase": "2.2"
+    },
+    {
+      "id": "P2-004",
+      "title": "Link audio and transcript files to reports",
+      "description": "When post-call webhook fires, match it to the original report and update the Audio Link and Transcript Link columns in Google Sheets.",
+      "acceptance_criteria": [
+        "Post-call webhook can find matching report by conversation_id or timestamp",
+        "Audio URL is written to column J (Audio Link)",
+        "Transcript URL is written to column K (Transcript Link)",
+        "updateFileUrls method implemented in GoogleSheetsReportRepository",
+        "Test end-to-end: conversation -> report -> post-call -> links updated"
+      ],
+      "priority": 2,
+      "dependencies": ["P2-003"],
+      "passes": true,
+      "notes": "updateFileUrls and findRecentReportWithoutFiles implemented. Post-call webhook uploads transcript to Drive and updates report rows. Needs ElevenLabs webhook config.",
+      "phase": "2.2"
+    },
+    {
+      "id": "P3-001",
+      "title": "Create email notification service",
+      "description": "Build service to send email notifications when daily reports are submitted. Use AWS SES or similar for delivery.",
+      "acceptance_criteria": [
+        "EmailService interface defined with sendReportNotification method",
+        "Implementation sends HTML email with report summary",
+        "Email includes job site, employee count, safety status",
+        "Recipients configurable via environment variable",
+        "Handles send failures gracefully with logging"
+      ],
+      "priority": 1,
+      "dependencies": ["P2-004"],
+      "passes": false,
+      "phase": "3.1"
+    },
+    {
+      "id": "P3-002",
+      "title": "Trigger email on successful report submission",
+      "description": "Wire up email notification to fire after a report is successfully saved to Google Sheets.",
+      "acceptance_criteria": [
+        "Email sent automatically after processReport succeeds",
+        "Email contains links to Google Sheets row",
+        "Email includes audio/transcript links if available",
+        "Email failure does not cause report submission to fail",
+        "Test email received within 1 minute of report submission"
+      ],
+      "priority": 2,
+      "dependencies": ["P3-001"],
+      "passes": false,
+      "phase": "3.1"
     }
   ]
 }

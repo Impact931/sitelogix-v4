@@ -1,0 +1,24 @@
+{
+    "agents": [
+        {
+            "name": "Roxy",
+            "agent_id": "agent_5101k6atqv7gezstbzcpvdqhvmgh"
+        },
+        {
+            "config": "agent_configs/Trixie.json",
+            "id": "agent_2701kf9pwhbdem7rg72w6fg973pm"
+        },
+        {
+            "config": "agent_configs/Cassie-The-Career-Counselor-2.json",
+            "id": "agent_6401k7jjc4g9fxyappdqs0f9ktjf"
+        },
+        {
+            "config": "agent_configs/Jenna-The-Jobsite-Agent-1.json",
+            "id": "agent_4901k6c4d7k9ea4t7q9w0v6yq1t7"
+        },
+        {
+            "config": "agent_configs/Roxy.json",
+            "id": "agent_5101k6atqv7gezstbzcpvdqhvmgh"
+        }
+    ]
+}

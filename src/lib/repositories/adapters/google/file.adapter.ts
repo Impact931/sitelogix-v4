@@ -2,7 +2,7 @@
  * Google Drive File Repository Adapter
  *
  * Implements FileRepository interface using Google Drive API.
- * Uploads files to Parkway Database folder structure.
+ * Uploads files to specific Parkway Database subfolders.
  */
 
 import { Readable } from 'stream'
@@ -11,49 +11,12 @@ import { getDriveClient, GOOGLE_CONFIG } from './auth'
 
 export class GoogleDriveFileRepository implements FileRepository {
   private drive = getDriveClient()
-  private parentFolderId = GOOGLE_CONFIG.DRIVE_FOLDER_ID
-
-  // Cache subfolder IDs to avoid repeated lookups
-  private subfolderIds: Map<string, string> = new Map()
 
   /**
-   * Get or create a subfolder within the parent folder
+   * Upload audio buffer to Google Drive
    */
-  private async getSubfolderId(folderName: string): Promise<string> {
-    // Check cache first
-    if (this.subfolderIds.has(folderName)) {
-      return this.subfolderIds.get(folderName)!
-    }
-
-    // Search for existing folder
-    const response = await this.drive.files.list({
-      q: `name='${folderName}' and '${this.parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-    })
-
-    if (response.data.files && response.data.files.length > 0) {
-      const folderId = response.data.files[0].id!
-      this.subfolderIds.set(folderName, folderId)
-      return folderId
-    }
-
-    // Create folder if it doesn't exist
-    const createResponse = await this.drive.files.create({
-      requestBody: {
-        name: folderName,
-        mimeType: 'application/vnd.google-apps.folder',
-        parents: [this.parentFolderId],
-      },
-      fields: 'id',
-    })
-
-    const newFolderId = createResponse.data.id!
-    this.subfolderIds.set(folderName, newFolderId)
-    return newFolderId
-  }
-
   async uploadAudio(buffer: Buffer, filename: string): Promise<string> {
-    const folderId = await this.getSubfolderId(GOOGLE_CONFIG.DRIVE_SUBFOLDERS.AUDIO)
+    const folderId = GOOGLE_CONFIG.DRIVE_FOLDERS.AUDIO
 
     const response = await this.drive.files.create({
       requestBody: {
@@ -79,8 +42,32 @@ export class GoogleDriveFileRepository implements FileRepository {
     return response.data.webViewLink || `https://drive.google.com/file/d/${response.data.id}/view`
   }
 
+  /**
+   * Download audio from a URL and upload to Google Drive
+   */
+  async uploadAudioFromUrl(url: string, filename: string): Promise<string> {
+    console.log('[FileAdapter] Downloading audio from:', url)
+
+    // Download the audio file from ElevenLabs
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`Failed to download audio: ${response.status} ${response.statusText}`)
+    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    console.log('[FileAdapter] Downloaded audio, size:', buffer.length, 'bytes')
+
+    // Upload to Google Drive
+    return this.uploadAudio(buffer, filename)
+  }
+
+  /**
+   * Upload transcript content to Google Drive
+   */
   async uploadTranscript(content: string, filename: string): Promise<string> {
-    const folderId = await this.getSubfolderId(GOOGLE_CONFIG.DRIVE_SUBFOLDERS.TRANSCRIPTS)
+    const folderId = GOOGLE_CONFIG.DRIVE_FOLDERS.TRANSCRIPTS
 
     const response = await this.drive.files.create({
       requestBody: {

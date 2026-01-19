@@ -290,9 +290,116 @@ export class GoogleSheetsReportRepository implements ReportRepository {
   }
 
   async updateFileUrls(id: string, audioUrl?: string, transcriptUrl?: string): Promise<void> {
-    // For Google Sheets, we would need to find and update the specific rows
-    // This is complex without a proper ID system
-    console.warn('updateFileUrls not fully implemented for Google Sheets')
+    // Find all rows with this report ID and update them
+    const response = await this.sheets.spreadsheets.values.get({
+      spreadsheetId: this.spreadsheetId,
+      range: `'${this.mainLogTab}'!A:Q`,
+    })
+
+    const rows = response.data.values || []
+    if (rows.length <= 1) {
+      console.warn('[ReportAdapter] No data rows found')
+      return
+    }
+
+    // Find rows with matching report ID (column Q, index 16)
+    const matchingRowIndices: number[] = []
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i]
+      if (row[16] === id) {
+        matchingRowIndices.push(i + 1) // +1 because Sheets is 1-indexed
+      }
+    }
+
+    if (matchingRowIndices.length === 0) {
+      console.warn(`[ReportAdapter] No rows found with report ID: ${id}`)
+      return
+    }
+
+    // Update each matching row
+    const updates: Array<{ range: string; values: string[][] }> = []
+
+    for (const rowIndex of matchingRowIndices) {
+      // Update column J (Audio Link) - index 10 (J)
+      if (audioUrl) {
+        updates.push({
+          range: `'${this.mainLogTab}'!J${rowIndex}`,
+          values: [[audioUrl]],
+        })
+      }
+      // Update column K (Transcript Link) - index 11 (K)
+      if (transcriptUrl) {
+        updates.push({
+          range: `'${this.mainLogTab}'!K${rowIndex}`,
+          values: [[transcriptUrl]],
+        })
+      }
+    }
+
+    if (updates.length > 0) {
+      await this.sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: this.spreadsheetId,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: updates,
+        },
+      })
+
+      console.log(`[ReportAdapter] Updated file URLs for ${matchingRowIndices.length} rows with report ID: ${id}`)
+    }
+  }
+
+  /**
+   * Find the most recent report that doesn't have file URLs yet
+   * Used to match post-call webhook data to reports
+   */
+  async findRecentReportWithoutFiles(): Promise<{ id: string; rowIndices: number[] } | null> {
+    const response = await this.sheets.spreadsheets.values.get({
+      spreadsheetId: this.spreadsheetId,
+      range: `'${this.mainLogTab}'!A:Q`,
+    })
+
+    const rows = response.data.values || []
+    if (rows.length <= 1) return null
+
+    // Group rows by report ID and find the most recent without files
+    const reportGroups = new Map<string, { timestamp: Date; rowIndices: number[]; hasFiles: boolean }>()
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i]
+      const reportId = row[16] // Column Q
+      const audioUrl = row[9]  // Column J
+      const transcriptUrl = row[10] // Column K
+      const timestamp = new Date(row[0]) // Column A
+
+      if (!reportId) continue
+
+      if (!reportGroups.has(reportId)) {
+        reportGroups.set(reportId, {
+          timestamp,
+          rowIndices: [],
+          hasFiles: !!(audioUrl || transcriptUrl),
+        })
+      }
+
+      const group = reportGroups.get(reportId)!
+      group.rowIndices.push(i + 1) // 1-indexed
+      if (audioUrl || transcriptUrl) {
+        group.hasFiles = true
+      }
+    }
+
+    // Find the most recent report without files
+    let mostRecent: { id: string; timestamp: Date; rowIndices: number[] } | null = null
+
+    for (const [id, group] of reportGroups) {
+      if (group.hasFiles) continue
+      if (!mostRecent || group.timestamp > mostRecent.timestamp) {
+        mostRecent = { id, timestamp: group.timestamp, rowIndices: group.rowIndices }
+      }
+    }
+
+    return mostRecent ? { id: mostRecent.id, rowIndices: mostRecent.rowIndices } : null
   }
 
   /**
