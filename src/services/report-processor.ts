@@ -47,11 +47,16 @@ export async function processReport(data: RoxyWebhookData): Promise<ProcessingRe
     const employeeRepo = getEmployeeRepository()
     const reportRepo = getReportRepository()
 
-    // Get all active employees for fuzzy matching
-    const activeEmployees = await employeeRepo.getAllActive()
-
-    if (activeEmployees.length === 0) {
-      warnings.push('No active employees found in reference list. Using original names.')
+    // Get all active employees for fuzzy matching (non-fatal if fails)
+    let activeEmployees: Awaited<ReturnType<typeof employeeRepo.getAllActive>> = []
+    try {
+      activeEmployees = await employeeRepo.getAllActive()
+      if (activeEmployees.length === 0) {
+        warnings.push('No active employees found in reference list. Using original names.')
+      }
+    } catch (empError) {
+      console.warn('[ReportProcessor] Could not load employee reference:', empError)
+      warnings.push('Could not access Employee Reference tab. Using original names.')
     }
 
     // Process employees with fuzzy matching
