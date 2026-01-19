@@ -292,6 +292,12 @@ export class GoogleSheetsReportRepository implements ReportRepository {
   }
 
   async updateFileUrls(id: string, audioUrl?: string, transcriptUrl?: string): Promise<void> {
+    console.log('[ReportAdapter] updateFileUrls called:', {
+      id,
+      audioUrl: audioUrl?.substring(0, 50),
+      transcriptUrl: transcriptUrl?.substring(0, 50),
+    })
+
     // Find all rows with this report ID and update them
     const response = await this.sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
@@ -299,6 +305,12 @@ export class GoogleSheetsReportRepository implements ReportRepository {
     })
 
     const rows = response.data.values || []
+    console.log('[ReportAdapter] Retrieved rows:', {
+      totalRows: rows.length,
+      spreadsheetId: this.spreadsheetId,
+      tab: this.mainLogTab,
+    })
+
     if (rows.length <= 1) {
       console.warn('[ReportAdapter] No data rows found')
       return
@@ -306,12 +318,25 @@ export class GoogleSheetsReportRepository implements ReportRepository {
 
     // Find rows with matching report ID (column Q, index 16)
     const matchingRowIndices: number[] = []
+    const allReportIds: string[] = []
+
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i]
-      if (row[16] === id) {
+      const rowReportId = row[16]
+      if (rowReportId) {
+        allReportIds.push(rowReportId)
+      }
+      if (rowReportId === id) {
         matchingRowIndices.push(i + 1) // +1 because Sheets is 1-indexed
+        console.log(`[ReportAdapter] Found matching row ${i + 1} with ID: ${rowReportId}`)
       }
     }
+
+    console.log('[ReportAdapter] Search results:', {
+      searchingFor: id,
+      foundRows: matchingRowIndices.length,
+      lastFiveReportIds: allReportIds.slice(-5),
+    })
 
     if (matchingRowIndices.length === 0) {
       console.warn(`[ReportAdapter] No rows found with report ID: ${id}`)
@@ -338,13 +363,24 @@ export class GoogleSheetsReportRepository implements ReportRepository {
       }
     }
 
+    console.log('[ReportAdapter] Prepared updates:', {
+      updateCount: updates.length,
+      ranges: updates.map(u => u.range),
+    })
+
     if (updates.length > 0) {
-      await this.sheets.spreadsheets.values.batchUpdate({
+      const result = await this.sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: this.spreadsheetId,
         requestBody: {
           valueInputOption: 'USER_ENTERED',
           data: updates,
         },
+      })
+
+      console.log('[ReportAdapter] Batch update result:', {
+        updatedCells: result.data.totalUpdatedCells,
+        updatedRows: result.data.totalUpdatedRows,
+        responses: result.data.responses?.length,
       })
 
       console.log(`[ReportAdapter] Updated file URLs for ${matchingRowIndices.length} rows with report ID: ${id}`)
@@ -356,13 +392,23 @@ export class GoogleSheetsReportRepository implements ReportRepository {
    * Used to match post-call webhook data to reports
    */
   async findRecentReportWithoutFiles(): Promise<{ id: string; rowIndices: number[] } | null> {
+    console.log('[ReportAdapter] findRecentReportWithoutFiles called')
+
     const response = await this.sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
       range: `'${this.mainLogTab}'!A:Q`,
     })
 
     const rows = response.data.values || []
-    if (rows.length <= 1) return null
+    console.log('[ReportAdapter] Retrieved rows for matching:', {
+      totalRows: rows.length,
+      spreadsheetId: this.spreadsheetId,
+    })
+
+    if (rows.length <= 1) {
+      console.warn('[ReportAdapter] No data rows found')
+      return null
+    }
 
     // Group rows by report ID and find the most recent without files
     const reportGroups = new Map<string, { timestamp: Date; rowIndices: number[]; hasFiles: boolean }>()
@@ -374,7 +420,10 @@ export class GoogleSheetsReportRepository implements ReportRepository {
       const transcriptUrl = row[11] // Column L
       const timestamp = new Date(row[0]) // Column A
 
-      if (!reportId) continue
+      if (!reportId) {
+        console.log(`[ReportAdapter] Row ${i + 1} has no report ID, skipping`)
+        continue
+      }
 
       if (!reportGroups.has(reportId)) {
         reportGroups.set(reportId, {
@@ -391,6 +440,12 @@ export class GoogleSheetsReportRepository implements ReportRepository {
       }
     }
 
+    console.log('[ReportAdapter] Report groups found:', {
+      totalGroups: reportGroups.size,
+      groupsWithFiles: Array.from(reportGroups.values()).filter(g => g.hasFiles).length,
+      groupsWithoutFiles: Array.from(reportGroups.values()).filter(g => !g.hasFiles).length,
+    })
+
     // Find the most recent report without files
     let mostRecent: { id: string; timestamp: Date; rowIndices: number[] } | null = null
 
@@ -399,6 +454,16 @@ export class GoogleSheetsReportRepository implements ReportRepository {
       if (!mostRecent || group.timestamp > mostRecent.timestamp) {
         mostRecent = { id, timestamp: group.timestamp, rowIndices: group.rowIndices }
       }
+    }
+
+    if (mostRecent) {
+      console.log('[ReportAdapter] Found most recent report without files:', {
+        id: mostRecent.id,
+        timestamp: mostRecent.timestamp.toISOString(),
+        rowIndices: mostRecent.rowIndices,
+      })
+    } else {
+      console.log('[ReportAdapter] No reports found without files')
     }
 
     return mostRecent ? { id: mostRecent.id, rowIndices: mostRecent.rowIndices } : null

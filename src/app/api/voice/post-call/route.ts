@@ -22,6 +22,25 @@ interface ElevenLabsAudioPayload {
 }
 
 /**
+ * Format date as "Daily Report DD-MMM-YY HHMMhrs" in Central Time
+ * Example: "Daily Report 18-Jan-26 2152hrs"
+ */
+function formatDateForFilename(date: Date = new Date()): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+  // Convert to Central Time
+  const centralTime = new Date(date.toLocaleString('en-US', { timeZone: 'America/Chicago' }))
+
+  const day = String(centralTime.getDate()).padStart(2, '0')
+  const month = months[centralTime.getMonth()]
+  const year = String(centralTime.getFullYear()).slice(-2)
+  const hours = String(centralTime.getHours()).padStart(2, '0')
+  const minutes = String(centralTime.getMinutes()).padStart(2, '0')
+
+  return `Daily Report ${day}-${month}-${year} ${hours}${minutes}hrs`
+}
+
+/**
  * Verify ElevenLabs webhook signature
  * Signature format: t=timestamp,v0=hash
  */
@@ -192,10 +211,13 @@ async function handleTranscriptionWebhook(payload: ElevenLabsPostCallPayload) {
   let transcriptUrl: string | undefined
   let audioUrl: string | undefined
 
+  // Generate human-readable filename base (e.g., "Daily Report 18-Jan-26 2152hrs")
+  const filenameBase = formatDateForFilename(new Date())
+
   // Upload transcript to Google Drive
   if (transcriptText) {
     try {
-      const filename = `transcript-${recentReport.id}-${payload.conversation_id}.txt`
+      const filename = `${filenameBase}.txt`
       transcriptUrl = await fileRepo.uploadTranscript(transcriptText, filename)
       console.log('[PostCall] Transcript uploaded:', transcriptUrl)
     } catch (uploadError) {
@@ -210,7 +232,7 @@ async function handleTranscriptionWebhook(payload: ElevenLabsPostCallPayload) {
       console.log('[PostCall] Fetching audio from ElevenLabs API...')
       const audioBuffer = await fetchAudioFromElevenLabs(payload.conversation_id)
       if (audioBuffer) {
-        const filename = `audio-${recentReport.id}-${payload.conversation_id}.mp3`
+        const filename = `${filenameBase}.mp3`
         audioUrl = await fileRepo.uploadAudio(audioBuffer, filename)
         console.log('[PostCall] Audio fetched and uploaded:', audioUrl)
       }
@@ -220,7 +242,7 @@ async function handleTranscriptionWebhook(payload: ElevenLabsPostCallPayload) {
   } else if (payload.recording_url) {
     // Use recording_url if provided (old format)
     try {
-      const filename = `audio-${recentReport.id}-${payload.conversation_id}.mp3`
+      const filename = `${filenameBase}.mp3`
       audioUrl = await fileRepo.uploadAudioFromUrl(payload.recording_url, filename)
       console.log('[PostCall] Audio downloaded and uploaded:', audioUrl)
     } catch (uploadError) {
@@ -283,9 +305,12 @@ async function handleAudioWebhook(payload: ElevenLabsAudioPayload) {
   let audioUrl: string | undefined
 
   try {
+    // Generate human-readable filename
+    const filenameBase = formatDateForFilename(new Date())
+
     // Decode base64 audio data
     const audioBuffer = Buffer.from(payload.audio_data, 'base64')
-    const filename = `audio-${recentReport.id}-${payload.conversation_id}.mp3`
+    const filename = `${filenameBase}.mp3`
     audioUrl = await fileRepo.uploadAudio(audioBuffer, filename)
     console.log('[PostCall] Audio uploaded from base64:', audioUrl)
 
