@@ -4,10 +4,11 @@
  * Implements ReportRepository interface using Google Sheets API.
  * Writes to "Main Report Log" and "Payroll Summary" tabs.
  *
- * Main Report Log Columns (matching existing sheet):
+ * Main Report Log Columns (matching existing Parkway sheet):
  * A: Timestamp | B: Job Site | C: Employee Name | D: Regular Hours | E: OT Hours
- * F: Deliveries | G: Equipment | H: Incidents/Safety | I: Shortages
- * J: Audio Link | K: Transcript Link | L: Weather | M: Delays | N: Notes
+ * F: Deliveries | G: Equipment | H: Safety | I: Weather | J: Shortages
+ * K: Audio Link | L: Transcript Link | M: Weather | N: Delays | O: Notes
+ * P: Subcontractors | Q: Work Performed | R: Report ID
  */
 
 import type {
@@ -47,6 +48,7 @@ export class GoogleSheetsReportRepository implements ReportRepository {
       .join(' - ') || ''
 
     // Write to Main Report Log - one row per employee
+    // Columns match Parkway sheet: A-R (18 columns)
     const mainLogRows = report.employees.map((emp) => [
       timestamp,                          // A: Timestamp
       report.jobSite || '',               // B: Job Site
@@ -55,21 +57,22 @@ export class GoogleSheetsReportRepository implements ReportRepository {
       emp.overtimeHours,                  // E: OT Hours
       deliveriesText,                     // F: Deliveries
       equipmentText,                      // G: Equipment
-      safetyText,                         // H: Incidents/Safety
-      report.shortages || '',             // I: Shortages
-      report.audioUrl || '',              // J: Audio Link
-      report.transcriptUrl || '',         // K: Transcript Link
-      weatherText,                        // L: Weather
-      delaysText,                         // M: Delays
-      report.notes || '',                 // N: Notes
-      subcontractorsText,                 // O: Subcontractors
-      workText,                           // P: Work Performed
-      reportId,                           // Q: Report ID
+      safetyText,                         // H: Safety
+      weatherText,                        // I: Weather
+      report.shortages || '',             // J: Shortages
+      report.audioUrl || '',              // K: Audio Link
+      report.transcriptUrl || '',         // L: Transcript Link
+      report.weatherImpact || '',         // M: Weather (impact/notes)
+      delaysText,                         // N: Delays
+      report.notes || '',                 // O: Notes
+      subcontractorsText,                 // P: Subcontractors
+      workText,                           // Q: Work Performed
+      reportId,                           // R: Report ID
     ])
 
     await this.sheets.spreadsheets.values.append({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A:Q`,
+      range: `'${this.mainLogTab}'!A:R`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: mainLogRows,
@@ -293,7 +296,7 @@ export class GoogleSheetsReportRepository implements ReportRepository {
     // Find all rows with this report ID and update them
     const response = await this.sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A:Q`,
+      range: `'${this.mainLogTab}'!A:R`,
     })
 
     const rows = response.data.values || []
@@ -302,11 +305,11 @@ export class GoogleSheetsReportRepository implements ReportRepository {
       return
     }
 
-    // Find rows with matching report ID (column Q, index 16)
+    // Find rows with matching report ID (column R, index 17)
     const matchingRowIndices: number[] = []
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i]
-      if (row[16] === id) {
+      if (row[17] === id) {
         matchingRowIndices.push(i + 1) // +1 because Sheets is 1-indexed
       }
     }
@@ -320,17 +323,17 @@ export class GoogleSheetsReportRepository implements ReportRepository {
     const updates: Array<{ range: string; values: string[][] }> = []
 
     for (const rowIndex of matchingRowIndices) {
-      // Update column J (Audio Link) - index 10 (J)
+      // Update column K (Audio Link)
       if (audioUrl) {
         updates.push({
-          range: `'${this.mainLogTab}'!J${rowIndex}`,
+          range: `'${this.mainLogTab}'!K${rowIndex}`,
           values: [[audioUrl]],
         })
       }
-      // Update column K (Transcript Link) - index 11 (K)
+      // Update column L (Transcript Link)
       if (transcriptUrl) {
         updates.push({
-          range: `'${this.mainLogTab}'!K${rowIndex}`,
+          range: `'${this.mainLogTab}'!L${rowIndex}`,
           values: [[transcriptUrl]],
         })
       }
@@ -356,7 +359,7 @@ export class GoogleSheetsReportRepository implements ReportRepository {
   async findRecentReportWithoutFiles(): Promise<{ id: string; rowIndices: number[] } | null> {
     const response = await this.sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A:Q`,
+      range: `'${this.mainLogTab}'!A:R`,
     })
 
     const rows = response.data.values || []
@@ -367,9 +370,9 @@ export class GoogleSheetsReportRepository implements ReportRepository {
 
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i]
-      const reportId = row[16] // Column Q
-      const audioUrl = row[9]  // Column J
-      const transcriptUrl = row[10] // Column K
+      const reportId = row[17] // Column R
+      const audioUrl = row[10]  // Column K
+      const transcriptUrl = row[11] // Column L
       const timestamp = new Date(row[0]) // Column A
 
       if (!reportId) continue
