@@ -45,3 +45,7 @@ next-env.d.ts
 # ElevenLabs CLI
 agents/
 tests.json
+
+# Lambda
+lambda/**/node_modules/
+lambda/**/*.zip
