@@ -294,6 +294,13 @@ export interface RoxyWebhookData {
 /**
  * ElevenLabs Post-Call Webhook Payload
  * Sent after a conversation ends with transcript and audio data
+ *
+ * Note: ElevenLabs sends webhooks in a wrapped format:
+ * {
+ *   type: 'post_call_transcription' | 'post_call_audio',
+ *   event_timestamp: number,
+ *   data: ElevenLabsPostCallPayload | { conversation_id, audio_data }
+ * }
  */
 export interface ElevenLabsPostCallPayload {
   conversation_id: string
@@ -301,13 +308,21 @@ export interface ElevenLabsPostCallPayload {
   call_duration_secs?: number
   status: 'done' | 'failed' | 'timeout'
   transcript?: ElevenLabsTranscriptEntry[]
-  metadata?: Record<string, unknown>
-  analysis?: {
-    call_successful?: boolean
-    transcript_summary?: string
+  metadata?: {
+    start_time_unix_secs?: number
+    call_duration_secs?: number
+    [key: string]: unknown
   }
-  // Audio URL is only included if send_audio is enabled
+  analysis?: {
+    call_successful?: string
+    transcript_summary?: string
+    evaluation_criteria_results?: Record<string, unknown>
+    data_collection_results?: Record<string, unknown>
+  }
+  // Audio URL is only included if send_audio is enabled (old format)
   recording_url?: string
+  // User ID if provided in conversation initiation
+  user_id?: string
 }
 
 export interface ElevenLabsTranscriptEntry {
