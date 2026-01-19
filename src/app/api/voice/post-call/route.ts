@@ -1,7 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHmac } from 'crypto'
 import { getFileRepository, getReportRepository } from '@/lib/repositories'
 import type { ElevenLabsPostCallPayload } from '@/lib/repositories'
 import { GoogleSheetsReportRepository } from '@/lib/repositories/adapters/google/report.adapter'
+
+const WEBHOOK_SECRET = process.env.ELEVENLABS_WEBHOOK_SECRET
+
+/**
+ * Verify ElevenLabs webhook signature
+ * Signature format: t=timestamp,v0=hash
+ */
+function verifySignature(payload: string, signature: string | null): boolean {
+  if (!WEBHOOK_SECRET || !signature) {
+    console.warn('[PostCall] Missing webhook secret or signature')
+    return false
+  }
+
+  try {
+    const parts = signature.split(',')
+    const timestamp = parts.find(p => p.startsWith('t='))?.slice(2)
+    const hash = parts.find(p => p.startsWith('v0='))?.slice(3)
+
+    if (!timestamp || !hash) {
+      console.warn('[PostCall] Invalid signature format')
+      return false
+    }
+
+    // Create the signed payload: timestamp.payload
+    const signedPayload = `${timestamp}.${payload}`
+    const expectedHash = createHmac('sha256', WEBHOOK_SECRET)
+      .update(signedPayload)
+      .digest('hex')
+
+    const isValid = hash === expectedHash
+    if (!isValid) {
+      console.warn('[PostCall] Signature mismatch')
+    }
+    return isValid
+  } catch (error) {
+    console.error('[PostCall] Signature verification error:', error)
+    return false
+  }
+}
 
 /**
  * POST /api/voice/post-call
@@ -10,11 +50,24 @@ import { GoogleSheetsReportRepository } from '@/lib/repositories/adapters/google
  * Contains transcript data and optionally audio recording URL.
  *
  * This endpoint is called by ElevenLabs, not the frontend.
- * Configure this URL in ElevenLabs agent settings under webhooks.
+ * Configure this URL in ElevenLabs workspace settings.
  */
 export async function POST(request: NextRequest) {
   try {
-    const payload: ElevenLabsPostCallPayload = await request.json()
+    // Get raw body for signature verification
+    const rawBody = await request.text()
+    const signature = request.headers.get('elevenlabs-signature')
+
+    // Verify signature (skip in development if no secret configured)
+    if (WEBHOOK_SECRET && !verifySignature(rawBody, signature)) {
+      console.error('[PostCall] Invalid webhook signature')
+      return NextResponse.json(
+        { success: false, error: 'Invalid signature' },
+        { status: 401 }
+      )
+    }
+
+    const payload: ElevenLabsPostCallPayload = JSON.parse(rawBody)
 
     console.log('[PostCall] Received webhook:', {
       conversation_id: payload.conversation_id,

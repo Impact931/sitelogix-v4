@@ -1,0 +1,782 @@
+{
+    "agent_id": "agent_5101k6atqv7gezstbzcpvdqhvmgh",
+    "name": "Roxy",
+    "conversation_config": {
+        "asr": {
+            "quality": "high",
+            "provider": "elevenlabs",
+            "user_input_audio_format": "pcm_16000",
+            "keywords": []
+        },
+        "turn": {
+            "turn_timeout": 5.0,
+            "initial_wait_time": null,
+            "silence_end_call_timeout": -1.0,
+            "soft_timeout_config": {
+                "timeout_seconds": -1.0,
+                "message": "Hhmmmm...yeah give me a second...",
+                "use_llm_generated_message": false
+            },
+            "mode": "turn",
+            "turn_eagerness": "normal",
+            "spelling_patience": "auto"
+        },
+        "tts": {
+            "model_id": "eleven_turbo_v2",
+            "voice_id": "cgSgspJ2msm6clMCkdW9",
+            "supported_voices": [],
+            "suggested_audio_tags": [],
+            "agent_output_audio_format": "pcm_16000",
+            "optimize_streaming_latency": 3,
+            "stability": 0.5,
+            "speed": 0.96,
+            "similarity_boost": 0.75,
+            "text_normalisation_type": "system_prompt",
+            "pronunciation_dictionary_locators": []
+        },
+        "conversation": {
+            "text_only": false,
+            "max_duration_seconds": 600,
+            "client_events": [
+                "audio",
+                "interruption",
+                "user_transcript",
+                "agent_response",
+                "agent_response_correction"
+            ],
+            "monitoring_enabled": false,
+            "monitoring_events": [
+                "user_transcript",
+                "agent_response",
+                "agent_response_correction"
+            ]
+        },
+        "language_presets": {},
+        "vad": {
+            "background_voice_detection": false
+        },
+        "agent": {
+            "first_message": "Hey hows it going - who am I talking with today?",
+            "language": "en",
+            "hinglish_mode": false,
+            "dynamic_variables": {
+                "dynamic_variable_placeholders": {}
+            },
+            "disable_first_message_interruptions": false,
+            "prompt": {
+                "prompt": "Roxy - Daily Report Assistant\n\nYou are Roxy, the daily report assistant for Parkway Construction. You're warm, efficient, and make paperwork painless. You have a friendly personality with a touch of southern charm - sweet, a little flirty, and direct - and you're really good at getting complete reports done fast.\n\nYour Job\nHelp field managers submit their daily reports through a quick conversation. Let them give you everything at once, check what's missing, ask only for what you need, confirm, and submit. Keep it under 3 minutes total.\nConversation Flow\n\nPhase 1: Greeting & Instruction (15 seconds)\n\nStart with a warm greeting and tell them what to do:\n\"Hey there, darling! This is Roxy with your daily report. Who am I talking with and what job site are you on? (remember their name throughout and use it)\n[let them respond so we can properly route the report - then continue]\n\n\"Now go ahead and give me everything - your crew, hours worked, any deliveries, safety issues, all of it. I'll let you know if I need anything else when you're done.\"\n\nThen shut up and let them talk.\n\nPhase 2: Listen to Full Report (1-2 minutes)\n\nDO NOT INTERRUPT\n\nLet them give you their complete report however they want to give it. They might:\n\nList everything methodically\nBrain dump everything in 30 seconds\nRamble and cover things out of order\nMiss half the checklist items\nGive you way more than you need\nYour job: Listen and process\n\nPhase 3: Check Against Checklist\nRequired Information:\n\u2705 Job site name\n\u2705 Who worked (a by name recall - first names are ok)\n\u2705 Hours worked\n\u2705 Safety check (can be \"no incidents\")\n\nOptional Information:\nDeliveries\nShortages/issues\nWeather\nEquipment\nAnything else\n\nAnalyze what they gave you:\nDid they mention the crew? (names or \"4 people\" or \"usual crew\")\nDid they mention hours? (\"8 hours\" or \"full day\" or \"everyone did 8\")\nDid they mention safety? (\"no incidents\" or \"all good\" or actual incident)\n\nPhase 4:\nResponse Path A - Everything's There\nIf they hit all the required points (site, crew, hours, safety):\n\"Perfect, sweety! Let me just confirm what I heard...\"\n[Quick summary]:\nJob site: [name]\nCrew: [X people or names]\nHours: [pattern]\nDeliveries: [if mentioned]\nSafety: [status]\n[Any other notes they mentioned]\n\"That sound right, darling?\"\nIf yes: \"You're all set! Submitting now... done! See you tomorrow!\" \u2192 Call submit_daily_report webhook\n\nPhase 4:\nResponse Path B - Missing Required Info\nIf they're missing something required, ask only for what's missing:\nMissing crew info: \"Got everything except - how many people were on your crew today?\"\nMissing hours: \"Almost there, darling! Just need to know how many hours everyone worked.\"\nMissing safety check: \"Quick safety check - any incidents or issues today, or all good?\"\nMissing multiple things: \"Good start, sweety! I just need [item 1] and [item 2] to wrap this up.\"\nOnce they fill in the gaps: Give quick confirmation and submit.\n\nPhase 4:\nResponse Path C - They Gave Too Much\nIf they rambled for 3 minutes and covered everything plus a bunch of extra:\n\"Alright, I got it all! Let me just hit the key points...\"\n[Summarize only the essentials]\n\"Sound good?\"\nIf yes: Submit\nHandling Edge Cases\nIf they're super vague:\n\"Okay so you had [vague thing]. Can you give me a number on that real quick?\"\n\nExample:\nThey said \"the crew worked today\" \u2192 \"How many people?\"\nThey said \"we worked\" \u2192 \"How many hours, darling?\"\nIf they say \"the usual\":\nWork with it if you can infer: \"Got it - so the usual crew, that's about [X] people?\" If you can't infer, ask: \"Just to confirm - how many is the usual crew?\"\nIf they're being difficult after you've asked:\n\"Well bless your heart, darling! I just need a number so we can get you out of here.\"\nIf they forget to mention safety:\nAlways ask, but make it easy: \"One more thing - any safety incidents today, or all clear?\"\nAccept \"all good\" or \"nope\" as valid.\nIf they're especially clear and complete:\n\"You're a peach! You just made this so easy.\"\n\nYour Personality Guide\n\nDO:\nUse \"darling\" or \"sweety\" sparingly - 2-3 times total per conversation\nEncourage the full report upfront: \"Go ahead and give me everything\"\nLet them talk without interrupting\nBe warm and appreciative: \"Perfect!\" \"You got it!\"\nShow you're listening in the confirmation: \"So everyone did 8 except you at 10 - got it.\"\nEnd positively: \"You're all done! That was easy, right?\"\nUse \"bless your heart\" only when they're being difficult or sarcastic after you've asked nicely\n\nDON'T:\nOverdo the southern terms - keep it natural\nInterrupt their report\nAsk questions one-by-one if they already told you\nRepeat yourself\nForce unnecessary detail\nFlirty but professional:\n\"You're making my day, darling!\" \u2705\nWarm, playful tone \u2705\n\"I love when you make this easy for me!\" \u2705\n\"Talk to you tomorrow, sweety!\" \u2705\nSouthern charm (use sparingly):\n\"Well aren't you just the best!\"\n\"Bless your heart\" (when frustrated or teasing them)\n\"You're a peach!\"\n\"Well I'll be!\"\n\nData Mapping for Webhook\nWhen you call submit_daily_report, structure the data like this:\njob_site: Whatever site name they gave\nemployees: Array of employee entries\nIf they gave names + hours: [{name: \"John Smith\", regular_hours: 8, overtime_hours: 0}, ...]\nIf they said \"everyone worked 8\": Create entries for each name with 8/0\nIf they said \"everyone 8, Corey had 2 OT\": Corey gets 8/2, others get 8/0\nIf they only gave a count: Work with what you have\ndeliveries: Array (if mentioned) or empty array\nsafety: Array of safety entries\nIf they said \"no incidents\": [{type: \"positive\", description: \"No incidents reported\", action_taken: \"\"}]\nIf they reported something: capture it\nshortages: String (if mentioned) or empty\nnotes: String for anything else or empty\nLeave other optional fields empty if not discussed.\n\nExample Conversations\n\nComplete Report in One Go:\nRoxy: \"Hey there, darling! This is Roxy with your daily report. What job site are you on, and go ahead and give me everything - your crew, hours worked, any deliveries, safety issues, all of it.\"\nUser: \"Maple Street project. Had me, John, Mike, and Sarah - four of us. Everyone worked 8 hours but I did 2 overtime. ABC Supply brought roofing materials around 10. No incidents, weather was good. That's it.\"\nRoxy: \"Perfect, sweety! Let me confirm - Maple Street, 4 crew members all worked 8 except you with 10 total, ABC Supply delivered roofing materials, no incidents. Sound good?\"\nUser: \"Yep.\"\nRoxy: \"You're all set! Submitting now... done! See you tomorrow!\" \u2192 Submit\n\nMissing Hours:\nRoxy: \"Hey, darling! This is Roxy. What job site, and give me your full report.\"\nUser: \"Johnson building. Had 6 people today. ABC Supply came by. No issues.\"\nRoxy: \"Got it! Just need one thing - how many hours did everyone work?\"\nUser: \"Oh, 8 hours.\"\nRoxy: \"Perfect! Johnson building, 6 crew at 8 hours each, ABC delivery, no incidents. Submitting... done!\" \u2192 Submit\n\nMissing Safety Check:\nRoxy: \"Hey there! Daily report. What site, and give me everything.\"\nUser: \"Oak Ridge. 3 people - me, Tom, and Mike. We all worked 8 hours. Had some rain delays in the afternoon.\"\nRoxy: \"Got it. Quick safety check - any incidents or all clear?\"\nUser: \"All clear.\"\nRoxy: \"Great! Oak Ridge, 3 people at 8 hours, rain delays, no incidents. Submitting... you're done, sweety!\" \u2192 Submit\n\nSuper Vague:\nRoxy: \"Hey, darling! What site and give me your full report.\"\nUser: \"Riverside. The crew worked. We got some stuff delivered. That's it.\"\nRoxy: \"Okay, almost there! How many people on the crew?\"\nUser: \"5.\"\nRoxy: \"And how many hours did everyone work?\"\nUser: \"8.\"\nRoxy: \"Perfect. Any safety incidents?\"\nUser: \"No.\"\nRoxy: \"Great! Riverside, 5 crew at 8 hours, deliveries received, no incidents. Submitting... done!\" \u2192 Submit\n\nBeing Difficult:\nRoxy: \"Hey! Daily report. What site and give me everything.\"\nUser: \"Site 4. Some people worked.\"\nRoxy: \"Okay - how many people, darling?\"\nUser: \"I don't know, a bunch.\"\nRoxy: \"Well bless your heart! I need a number so I can get you out of here. Was it 3, 5, 7?\"\nUser: \"Like 4.\"\nRoxy: \"There we go! And hours?\"\nUser: \"We worked today.\"\nRoxy: \"How many hours, sweety?\"\nUser: \"8.\"\nRoxy: \"Perfect. Safety issues?\"\nUser: \"Nope.\"\nRoxy: \"Great! Site 4, 4 people at 8 hours, no incidents. Submitting... done!\" \u2192 Submit\n\nRambling but Complete:\nRoxy: \"Hey, darling! Daily report. What site and give me everything.\"\nUser: \"Yeah so we're at Riverside Commons and it was crazy today because the inspector showed up unannounced which was annoying but whatever. I had 5 guys - me, John, Mike, Sarah, Tom, and we all busted our butts for 8 hours except I stayed late to deal with the inspector so I did 10. ABC Supply was supposed to come at 9 but they didn't show until noon with the shingles which threw us off. No injuries thank god but Mike almost stepped on a nail. Weather was hot. Anyway that's it I think.\"\nRoxy: \"Got it all! So Riverside Commons, 5 crew with you at 10 total and everyone else at 8, ABC Supply delivered shingles late, near-miss with Mike and the nail. Sound good?\"\nUser: \"Yeah.\"\nRoxy: \"Perfect! Submitting... you're all set, sweety!\" \u2192 Submit\n\nKey Reminders\n\u2705 Encourage them to give the full report upfront\n\u2705 Don't interrupt - let them talk\n\u2705 Check their report against the required checklist items\n\u2705 Only ask for what's actually missing\n\u2705 If they covered everything, just confirm and submit\n\u2705 Use \"darling\" and \"sweety\" sparingly (2-3 times)\n\u2705 Save \"bless your heart\" for when they're being difficult or you are teasing them\n\u2705 Keep total conversation under 3 minutes\n\u2705 Match their energy - if they're fast, be fast\n\u2705 Always confirm before submitting\n\u2705 End on a positive note\nYou're their ally in getting this done fast so they can get home. Make it painless and even fun!",
+                "llm": "glm-45-air-fp8",
+                "reasoning_effort": "low",
+                "thinking_budget": null,
+                "temperature": 0.15,
+                "max_tokens": -1,
+                "tool_ids": [
+                    "tool_8201kf9ndxs4fzr83jzx8th0cnre"
+                ],
+                "built_in_tools": {
+                    "end_call": null,
+                    "language_detection": null,
+                    "transfer_to_agent": null,
+                    "transfer_to_number": null,
+                    "skip_turn": {
+                        "type": "system",
+                        "name": "skip_turn",
+                        "description": "",
+                        "response_timeout_secs": 20,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "assignments": [],
+                        "tool_call_sound": null,
+                        "tool_call_sound_behavior": "auto",
+                        "params": {
+                            "system_tool_type": "skip_turn"
+                        }
+                    },
+                    "play_keypad_touch_tone": null,
+                    "voicemail_detection": null
+                },
+                "enable_parallel_tool_calls": false,
+                "mcp_server_ids": [],
+                "native_mcp_server_ids": [],
+                "knowledge_base": [
+                    {
+                        "type": "file",
+                        "name": "ISO/MATERIAL WORKSHEET1 1 1 1 1 MilliIProject:1Date:ISubject/PO:CONSTRUCTION SERVICESArea:MATERIALDescriptionQtyDescriptionQtyQtyDescription",
+                        "id": "aO5fHAwfn43id3W9paNe",
+                        "usage_mode": "prompt"
+                    },
+                    {
+                        "type": "file",
+                        "name": "incident report 2020-1-22.docx",
+                        "id": "Au0Jaj0WS9AcKJiqXG65",
+                        "usage_mode": "auto"
+                    },
+                    {
+                        "type": "file",
+                        "name": "ABOUT PARKWAY CS",
+                        "id": "L8HQBPaqrMhVva6aiph6",
+                        "usage_mode": "auto"
+                    },
+                    {
+                        "type": "file",
+                        "name": "SOP",
+                        "id": "RT4S6A8yZW6Hnyw9IRMR",
+                        "usage_mode": "auto"
+                    },
+                    {
+                        "type": "file",
+                        "name": "Rctmyc{\u00a3Eqpuvtwevkqp\u00a3Ugtxkegu\u00a3",
+                        "id": "d93zA9DCmwMZhhWvKpHx",
+                        "usage_mode": "auto"
+                    },
+                    {
+                        "type": "file",
+                        "name": "DAILY REPORT",
+                        "id": "IrxaQCZIUI4vlQqfmlCa",
+                        "usage_mode": "prompt"
+                    },
+                    {
+                        "type": "file",
+                        "name": "Rctmyc{\u00a3Eqpuvtwevkqp\u00a3Ugtxkegu\u00a3",
+                        "id": "ofTXQ4FMkDpTco66fR5A",
+                        "usage_mode": "auto"
+                    }
+                ],
+                "custom_llm": null,
+                "ignore_default_personality": false,
+                "rag": {
+                    "enabled": true,
+                    "embedding_model": "e5_mistral_7b_instruct",
+                    "max_vector_distance": 0.6,
+                    "max_documents_length": 50000,
+                    "max_retrieved_rag_chunks_count": 20,
+                    "query_rewrite_prompt_override": null
+                },
+                "timezone": "America/Chicago",
+                "backup_llm_config": {
+                    "preference": "default"
+                },
+                "cascade_timeout_seconds": 8.0,
+                "tools": [
+                    {
+                        "type": "webhook",
+                        "name": "submit_daily_report",
+                        "description": "Submit the completed daily report after collecting all information from the field manager. Call this tool once you have gathered job site, employee hours, deliveries, and any other relevant information.",
+                        "response_timeout_secs": 20,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "assignments": [],
+                        "tool_call_sound": null,
+                        "tool_call_sound_behavior": "auto",
+                        "dynamic_variables": {
+                            "dynamic_variable_placeholders": {}
+                        },
+                        "execution_mode": "immediate",
+                        "api_schema": {
+                            "request_headers": {},
+                            "url": "https://main.d1cws8aox3ojzk.amplifyapp.com/api/voice/webhook",
+                            "method": "POST",
+                            "path_params_schema": {},
+                            "query_params_schema": null,
+                            "request_body_schema": {
+                                "type": "object",
+                                "required": [
+                                    "job_site",
+                                    "employees"
+                                ],
+                                "description": "Daily report data collected from the field manager conversation",
+                                "properties": {
+                                    "job_site": {
+                                        "type": "string",
+                                        "description": "The name of the job site or project location",
+                                        "enum": null,
+                                        "is_system_provided": false,
+                                        "dynamic_variable": "",
+                                        "constant_value": ""
+                                    },
+                                    "employees": {
+                                        "type": "array",
+                                        "description": "List of employees with their hours worked today",
+                                        "items": {
+                                            "type": "object",
+                                            "required": [
+                                                "name",
+                                                "regular_hours",
+                                                "overtime_hours"
+                                            ],
+                                            "description": "Employee hours entry with name, regular_hours, overtime_hours",
+                                            "properties": {
+                                                "name": {
+                                                    "type": "string",
+                                                    "description": "Employee name as spoken",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "regular_hours": {
+                                                    "type": "number",
+                                                    "description": "Regular hours worked (typically up to 8)",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "overtime_hours": {
+                                                    "type": "number",
+                                                    "description": "Overtime hours worked (beyond 8), use 0 if none",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "deliveries": {
+                                        "type": "array",
+                                        "description": "List of deliveries received today",
+                                        "items": {
+                                            "type": "object",
+                                            "required": [
+                                                "vendor",
+                                                "material"
+                                            ],
+                                            "description": "Delivery entry with vendor, material, quantity, notes",
+                                            "properties": {
+                                                "vendor": {
+                                                    "type": "string",
+                                                    "description": "Vendor or supplier name",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "material": {
+                                                    "type": "string",
+                                                    "description": "What was delivered",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "quantity": {
+                                                    "type": "string",
+                                                    "description": "Amount delivered if mentioned",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "notes": {
+                                                    "type": "string",
+                                                    "description": "Any delivery notes",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "equipment": {
+                                        "type": "array",
+                                        "description": "Equipment used on site today",
+                                        "items": {
+                                            "type": "object",
+                                            "required": [
+                                                "name"
+                                            ],
+                                            "description": "Equipment entry with name, hours, notes",
+                                            "properties": {
+                                                "name": {
+                                                    "type": "string",
+                                                    "description": "Equipment name or type",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "hours": {
+                                                    "type": "number",
+                                                    "description": "Hours used",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "notes": {
+                                                    "type": "string",
+                                                    "description": "Any equipment issues or notes",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "subcontractors": {
+                                        "type": "array",
+                                        "description": "Subcontractors on site today",
+                                        "items": {
+                                            "type": "object",
+                                            "required": [
+                                                "company"
+                                            ],
+                                            "description": "Subcontractor entry",
+                                            "properties": {
+                                                "company": {
+                                                    "type": "string",
+                                                    "description": "Subcontractor company name",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "trade": {
+                                                    "type": "string",
+                                                    "description": "Type of work",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "headcount": {
+                                                    "type": "number",
+                                                    "description": "Number of workers",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "work_performed": {
+                                                    "type": "string",
+                                                    "description": "What work they did",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "weather_conditions": {
+                                        "type": "string",
+                                        "description": "Weather conditions today",
+                                        "enum": null,
+                                        "is_system_provided": false,
+                                        "dynamic_variable": "",
+                                        "constant_value": ""
+                                    },
+                                    "weather_impact": {
+                                        "type": "string",
+                                        "description": "How weather affected work",
+                                        "enum": null,
+                                        "is_system_provided": false,
+                                        "dynamic_variable": "",
+                                        "constant_value": ""
+                                    },
+                                    "safety": {
+                                        "type": "array",
+                                        "description": "Safety incidents or observations",
+                                        "items": {
+                                            "type": "object",
+                                            "required": [
+                                                "type",
+                                                "description"
+                                            ],
+                                            "description": "Safety entry",
+                                            "properties": {
+                                                "type": {
+                                                    "type": "string",
+                                                    "description": "Type: incident, near_miss, hazard, or positive",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "description": {
+                                                    "type": "string",
+                                                    "description": "What happened",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "action_taken": {
+                                                    "type": "string",
+                                                    "description": "Action taken if any",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "delays": {
+                                        "type": "array",
+                                        "description": "Any delays today",
+                                        "items": {
+                                            "type": "object",
+                                            "required": [
+                                                "reason"
+                                            ],
+                                            "description": "Delay entry",
+                                            "properties": {
+                                                "reason": {
+                                                    "type": "string",
+                                                    "description": "Cause of delay",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "duration": {
+                                                    "type": "string",
+                                                    "description": "How long",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "impact": {
+                                                    "type": "string",
+                                                    "description": "Impact on project",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "work_performed": {
+                                        "type": "array",
+                                        "description": "Work completed today",
+                                        "items": {
+                                            "type": "object",
+                                            "required": [
+                                                "description"
+                                            ],
+                                            "description": "Work entry",
+                                            "properties": {
+                                                "description": {
+                                                    "type": "string",
+                                                    "description": "What work was done",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                },
+                                                "area": {
+                                                    "type": "string",
+                                                    "description": "Where on site",
+                                                    "enum": null,
+                                                    "is_system_provided": false,
+                                                    "dynamic_variable": "",
+                                                    "constant_value": ""
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "shortages": {
+                                        "type": "string",
+                                        "description": "Material shortages or items needed",
+                                        "enum": null,
+                                        "is_system_provided": false,
+                                        "dynamic_variable": "",
+                                        "constant_value": ""
+                                    },
+                                    "notes": {
+                                        "type": "string",
+                                        "description": "Additional notes",
+                                        "enum": null,
+                                        "is_system_provided": false,
+                                        "dynamic_variable": "",
+                                        "constant_value": ""
+                                    }
+                                }
+                            },
+                            "content_type": "application/json",
+                            "auth_connection": null
+                        }
+                    },
+                    {
+                        "type": "system",
+                        "name": "skip_turn",
+                        "description": "",
+                        "response_timeout_secs": 20,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "assignments": [],
+                        "tool_call_sound": null,
+                        "tool_call_sound_behavior": "auto",
+                        "params": {
+                            "system_tool_type": "skip_turn"
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    "metadata": {
+        "created_at_unix_secs": 1759152698,
+        "updated_at_unix_secs": 1768777924
+    },
+    "platform_settings": {
+        "evaluation": {
+            "criteria": []
+        },
+        "widget": {
+            "variant": "compact",
+            "placement": "top",
+            "expandable": "never",
+            "avatar": {
+                "type": "orb",
+                "color_1": "#6DB035",
+                "color_2": "#F5CABB"
+            },
+            "feedback_mode": "none",
+            "end_feedback": null,
+            "bg_color": "#ffffff",
+            "text_color": "#000000",
+            "btn_color": "#000000",
+            "btn_text_color": "#ffffff",
+            "border_color": "#e1e1e1",
+            "focus_color": "#000000",
+            "border_radius": null,
+            "btn_radius": null,
+            "action_text": null,
+            "start_call_text": null,
+            "end_call_text": null,
+            "expand_text": null,
+            "listening_text": null,
+            "speaking_text": null,
+            "shareable_page_text": null,
+            "shareable_page_show_terms": true,
+            "terms_text": null,
+            "terms_html": null,
+            "terms_key": null,
+            "show_avatar_when_collapsed": false,
+            "disable_banner": false,
+            "override_link": null,
+            "markdown_link_allowed_hosts": [],
+            "markdown_link_include_www": true,
+            "markdown_link_allow_http": true,
+            "mic_muting_enabled": false,
+            "transcript_enabled": false,
+            "text_input_enabled": true,
+            "conversation_mode_toggle_enabled": false,
+            "default_expanded": true,
+            "always_expanded": false,
+            "text_contents": {
+                "main_label": null,
+                "start_call": null,
+                "start_chat": null,
+                "new_call": null,
+                "end_call": null,
+                "mute_microphone": null,
+                "change_language": null,
+                "collapse": null,
+                "expand": null,
+                "copied": null,
+                "accept_terms": null,
+                "dismiss_terms": null,
+                "listening_status": null,
+                "speaking_status": null,
+                "connecting_status": null,
+                "chatting_status": null,
+                "input_label": null,
+                "input_placeholder": null,
+                "input_placeholder_text_only": null,
+                "input_placeholder_new_conversation": null,
+                "user_ended_conversation": null,
+                "agent_ended_conversation": null,
+                "conversation_id": null,
+                "error_occurred": null,
+                "copy_id": null,
+                "initiate_feedback": null,
+                "request_follow_up_feedback": null,
+                "thanks_for_feedback": null,
+                "thanks_for_feedback_details": null,
+                "follow_up_feedback_placeholder": null,
+                "submit": null,
+                "go_back": null
+            },
+            "styles": {
+                "base": null,
+                "base_hover": null,
+                "base_active": null,
+                "base_border": null,
+                "base_subtle": null,
+                "base_primary": null,
+                "base_error": null,
+                "accent": null,
+                "accent_hover": null,
+                "accent_active": null,
+                "accent_border": null,
+                "accent_subtle": null,
+                "accent_primary": null,
+                "overlay_padding": null,
+                "button_radius": null,
+                "input_radius": null,
+                "bubble_radius": null,
+                "sheet_radius": null,
+                "compact_sheet_radius": null,
+                "dropdown_sheet_radius": null
+            },
+            "language_selector": false,
+            "supports_text_only": true,
+            "custom_avatar_path": null,
+            "language_presets": {}
+        },
+        "data_collection": {},
+        "overrides": {
+            "conversation_config_override": {
+                "turn": {
+                    "soft_timeout_config": {
+                        "message": false
+                    }
+                },
+                "tts": {
+                    "voice_id": false,
+                    "stability": false,
+                    "speed": false,
+                    "similarity_boost": false
+                },
+                "conversation": {
+                    "text_only": true
+                },
+                "agent": {
+                    "first_message": false,
+                    "language": false,
+                    "prompt": {
+                        "prompt": false,
+                        "llm": false,
+                        "native_mcp_server_ids": false
+                    }
+                }
+            },
+            "custom_llm_extra_body": false,
+            "enable_conversation_initiation_client_data_from_webhook": true
+        },
+        "workspace_overrides": {
+            "conversation_initiation_client_data_webhook": null,
+            "webhooks": {
+                "post_call_webhook_id": null,
+                "events": [
+                    "transcript"
+                ],
+                "send_audio": false
+            }
+        },
+        "testing": {
+            "attached_tests": [],
+            "referenced_tests_ids": []
+        },
+        "archived": false,
+        "guardrails": {
+            "version": "1",
+            "moderation": {
+                "config": {
+                    "sexual": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "violence": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "violence_graphic": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "harassment": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "harassment_threatening": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "hate": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "hate_threatening": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "self_harm_instructions": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "self_harm": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "self_harm_intent": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "sexual_minors": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    }
+                }
+            }
+        },
+        "auth": {
+            "enable_auth": false,
+            "allowlist": [],
+            "shareable_token": null
+        },
+        "call_limits": {
+            "agent_concurrency_limit": -1,
+            "daily_limit": 100000,
+            "bursting_enabled": true
+        },
+        "ban": null,
+        "privacy": {
+            "record_voice": true,
+            "retention_days": -1,
+            "delete_transcript_and_pii": false,
+            "delete_audio": false,
+            "apply_to_existing_conversations": false,
+            "zero_retention_mode": false
+        },
+        "safety": {
+            "is_blocked_ivc": false,
+            "is_blocked_non_ivc": false,
+            "ignore_safety_evaluation": false
+        }
+    },
+    "phone_numbers": [],
+    "whatsapp_accounts": [],
+    "workflow": {
+        "edges": {},
+        "nodes": {
+            "start_node": {
+                "type": "start",
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0
+                },
+                "edge_order": []
+            }
+        },
+        "prevent_subagent_loops": false
+    },
+    "access_info": {
+        "is_creator": true,
+        "creator_name": "manager@impactconsulting931.com",
+        "creator_email": "manager@impactconsulting931.com",
+        "role": "admin"
+    },
+    "tags": [],
+    "version_id": null,
+    "branch_id": null,
+    "main_branch_id": null
+}
