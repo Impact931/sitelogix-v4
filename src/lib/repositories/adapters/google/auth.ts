@@ -62,7 +62,7 @@ export const GOOGLE_CONFIG = {
 
   // Tab names in the spreadsheet
   TABS: {
-    EMPLOYEES: 'Employee Reference',
+    EMPLOYEES: 'Employee Roster',
     MAIN_LOG: 'Main Report Log',
     PAYROLL_SUMMARY: 'Payroll Summary',
   },
