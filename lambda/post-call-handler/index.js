@@ -748,20 +748,29 @@ exports.handler = async (event) => {
       };
     }
 
+    // ElevenLabs sends post-call webhooks in a wrapped format:
+    // { type: "post_call_transcription", event_timestamp: ..., data: { status, conversation_id, ... } }
+    // Unwrap to get the actual conversation data
+    let convData = body;
+    if (body.type && body.data) {
+      console.log(`[PostCall] Unwrapping ElevenLabs envelope: type=${body.type}`);
+      convData = body.data;
+    }
+
     // Single conversation mode
     console.log('Parsed body:', JSON.stringify({
-      conversation_id: body.conversation_id,
-      status: body.status,
+      conversation_id: convData.conversation_id,
+      status: convData.status,
     }));
 
-    if (body.status !== 'done') {
+    if (convData.status !== 'done') {
       return {
         statusCode: 200,
-        body: JSON.stringify({ success: true, message: `Status: ${body.status}` }),
+        body: JSON.stringify({ success: true, message: `Status: ${convData.status}` }),
       };
     }
 
-    if (!body.conversation_id) {
+    if (!convData.conversation_id) {
       return {
         statusCode: 400,
         body: JSON.stringify({ success: false, error: 'Missing conversation_id' }),
@@ -771,7 +780,7 @@ exports.handler = async (event) => {
     // Get conversation date
     let conversationDate = new Date();
     try {
-      const details = await getConversationDetails(body.conversation_id);
+      const details = await getConversationDetails(convData.conversation_id);
       if (details.start_time_unix_secs) {
         conversationDate = new Date(details.start_time_unix_secs * 1000);
       }
@@ -785,7 +794,7 @@ exports.handler = async (event) => {
 
     const { audioUrl, transcriptUrl } = await processConversation(
       auth,
-      body.conversation_id,
+      convData.conversation_id,
       conversationDate,
       existingAudioFiles,
       existingTranscriptFiles
@@ -800,7 +809,7 @@ exports.handler = async (event) => {
 
     // Write to DynamoDB (system of record)
     try {
-      const details = await getConversationDetails(body.conversation_id);
+      const details = await getConversationDetails(convData.conversation_id);
       const transcript = details.transcript || [];
       const transcriptText = formatTranscript(transcript);
       const callDurationSecs = details.metadata?.call_duration_secs || details.call_duration_secs || null;
@@ -813,7 +822,7 @@ exports.handler = async (event) => {
 
       await writeToDynamoDB(
         reportId || `RPT-${Date.now()}`,
-        body.conversation_id,
+        convData.conversation_id,
         transcript,
         transcriptText,
         audioUrl,
@@ -821,7 +830,7 @@ exports.handler = async (event) => {
         callDurationSecs,
         reportData
       );
-      console.log('[DynamoDB] Write complete for conversation:', body.conversation_id);
+      console.log('[DynamoDB] Write complete for conversation:', convData.conversation_id);
     } catch (dynamoError) {
       console.error('[DynamoDB] Write failed (non-blocking):', dynamoError.message);
     }
@@ -830,7 +839,7 @@ exports.handler = async (event) => {
       statusCode: 200,
       body: JSON.stringify({
         success: true,
-        conversation_id: body.conversation_id,
+        conversation_id: convData.conversation_id,
         audio_uploaded: !!audioUrl,
         transcript_uploaded: !!transcriptUrl,
         dynamo_synced: true,
