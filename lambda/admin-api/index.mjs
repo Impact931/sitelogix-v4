@@ -72,6 +72,14 @@ export const handler = async (event) => {
   const params = event.queryStringParameters || {}
 
   try {
+    // GET /reports?conversationId=XXX — find report by conversation ID
+    if ((path === '/reports' || path === '/') && params.conversationId) {
+      const items = await getRecentReports(50)
+      const match = items.find((r) => r.conversationId === params.conversationId)
+      if (!match) return respond(404, { error: 'Report not found for conversation' })
+      return respond(200, { report: match })
+    }
+
     // GET /reports
     if (path === '/reports' || path === '/') {
       const limit = Number(params.limit) || 20

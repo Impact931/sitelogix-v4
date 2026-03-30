@@ -289,7 +289,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                     <span className="text-gray-500">{emp.totalHours} hrs</span>
                   </div>
                 ))}
-                <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between text-sm font-semibold">
+                <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between text-sm font-bold text-gray-900">
                   <span>Total ({report.employees.length} workers)</span>
                   <span>{totalHours} hrs</span>
                 </div>

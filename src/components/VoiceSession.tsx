@@ -9,6 +9,7 @@ interface VoiceSessionProps {
 }
 
 interface ConversationResult {
+  conversationId?: string
   transcript?: string
   data?: Record<string, unknown>
 }
@@ -70,7 +71,13 @@ export default function VoiceSession({ onComplete, onError, onCancel }: VoiceSes
             console.log('[ElevenLabs] Disconnected - session complete')
             setState('complete')
             setStatusMessage('Report submitted successfully!')
-            onComplete({})
+            // Try to get conversation ID for post-call lookup
+            let convId: string | undefined
+            try {
+              // @ts-expect-error - ElevenLabs SDK types
+              convId = conversation?.getId?.() || conversation?.id
+            } catch { /* ignore */ }
+            onComplete({ conversationId: convId })
           },
           onMessage: (message: { source: string; message: string }) => {
             console.log('[ElevenLabs Message]:', message)
