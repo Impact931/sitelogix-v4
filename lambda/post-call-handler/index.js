@@ -602,9 +602,89 @@ async function writeToDynamoDB(reportId, conversationId, transcript, transcriptT
   }
 }
 
+// Load employee roster from Google Sheets for name matching
+async function loadEmployeeRoster(auth) {
+  const sheets = google.sheets({ version: 'v4', auth });
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: GOOGLE_SHEETS_ID,
+    range: "'Employee Roster'!A2:B",
+  });
+  const rows = response.data.values || [];
+  return rows
+    .filter(row => row[0] && (!row[1] || row[1].toLowerCase() !== 'inactive'))
+    .map(row => row[0].trim());
+}
+
+// Levenshtein distance for fuzzy name matching
+function levenshtein(a, b) {
+  const m = [];
+  for (let i = 0; i <= b.length; i++) m[i] = [i];
+  for (let j = 0; j <= a.length; j++) m[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      m[i][j] = b[i-1] === a[j-1]
+        ? m[i-1][j-1]
+        : Math.min(m[i-1][j-1]+1, m[i][j-1]+1, m[i-1][j]+1);
+    }
+  }
+  return m[b.length][a.length];
+}
+
+// Match a spoken name to the closest employee roster name
+// Handles: first-name-only ("Jayson" → "Jayson Rivas"), nicknames, typos
+function matchEmployeeName(spokenName, roster) {
+  if (!roster || roster.length === 0) return spokenName;
+
+  const spoken = spokenName.toLowerCase().trim();
+
+  // 1. Exact match
+  const exact = roster.find(r => r.toLowerCase() === spoken);
+  if (exact) return exact;
+
+  // 2. First-name match (e.g., "Jayson" matches "Jayson Rivas")
+  const firstNameMatches = roster.filter(r =>
+    r.toLowerCase().split(' ')[0] === spoken.split(' ')[0]
+  );
+  if (firstNameMatches.length === 1) return firstNameMatches[0];
+
+  // 3. Partial/contains match (spoken name is part of roster name or vice versa)
+  const containsMatches = roster.filter(r =>
+    r.toLowerCase().includes(spoken) || spoken.includes(r.toLowerCase())
+  );
+  if (containsMatches.length === 1) return containsMatches[0];
+
+  // 4. Levenshtein fuzzy match
+  let bestMatch = null;
+  let bestScore = Infinity;
+  for (const name of roster) {
+    const dist = levenshtein(spoken, name.toLowerCase());
+    const maxLen = Math.max(spoken.length, name.length);
+    const similarity = 1 - (dist / maxLen);
+    if (similarity > 0.5 && dist < bestScore) {
+      bestScore = dist;
+      bestMatch = name;
+    }
+  }
+  if (bestMatch) return bestMatch;
+
+  // No match found — return original
+  return spokenName;
+}
+
 // Read the most recent report data from Google Sheets for DynamoDB sync
+// Also applies employee name matching against the roster
 async function getRecentReportData(auth, reportId) {
   const sheets = google.sheets({ version: 'v4', auth });
+
+  // Load roster for name matching
+  let roster = [];
+  try {
+    roster = await loadEmployeeRoster(auth);
+    console.log(`[NameMatch] Loaded ${roster.length} employees from roster`);
+  } catch (e) {
+    console.warn('[NameMatch] Could not load roster:', e.message);
+  }
+
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: GOOGLE_SHEETS_ID,
     range: "'Main Report Log'!A:Q",
@@ -618,9 +698,14 @@ async function getRecentReportData(auth, reportId) {
     const row = rows[i];
     if (row[16] === reportId) {
       jobSite = row[1] || jobSite;
+      const originalName = row[2] || 'Unknown';
+      const normalizedName = matchEmployeeName(originalName, roster);
+      if (normalizedName !== originalName) {
+        console.log(`[NameMatch] "${originalName}" → "${normalizedName}"`);
+      }
       employees.push({
-        name: row[2] || 'Unknown',
-        normalizedName: row[2] || 'Unknown',
+        name: originalName,
+        normalizedName,
         regularHours: Number(row[3]) || 0,
         overtimeHours: Number(row[4]) || 0,
         totalHours: (Number(row[3]) || 0) + (Number(row[4]) || 0),
@@ -628,15 +713,16 @@ async function getRecentReportData(auth, reportId) {
     }
   }
 
+  const matchedRow = rows.find(r => r[16] === reportId);
   return {
     jobSite,
     employees,
-    deliveriesText: rows.find(r => r[16] === reportId)?.[5] || undefined,
-    equipmentText: rows.find(r => r[16] === reportId)?.[6] || undefined,
-    safetyText: rows.find(r => r[16] === reportId)?.[7] || undefined,
-    weatherConditions: rows.find(r => r[16] === reportId)?.[8] || undefined,
-    shortages: rows.find(r => r[16] === reportId)?.[9] || undefined,
-    notes: rows.find(r => r[16] === reportId)?.[13] || undefined,
+    deliveriesText: matchedRow?.[5] || undefined,
+    equipmentText: matchedRow?.[6] || undefined,
+    safetyText: matchedRow?.[7] || undefined,
+    weatherConditions: matchedRow?.[8] || undefined,
+    shortages: matchedRow?.[9] || undefined,
+    notes: matchedRow?.[13] || undefined,
   };
 }
 

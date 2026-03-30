@@ -15,30 +15,18 @@ export async function POST(request: NextRequest) {
   try {
     const payload = await request.json()
 
-    console.log('[PostCall] Webhook received (passthrough):', {
+    console.log('[PostCall] Webhook received (passthrough only - no forwarding):', {
       type: payload.type,
       conversation_id: payload.data?.conversation_id || payload.conversation_id,
     })
 
-    // Forward to Lambda Function URL for processing
-    const lambdaUrl = process.env.POST_CALL_LAMBDA_URL
-    if (lambdaUrl) {
-      try {
-        const lambdaResponse = await fetch(lambdaUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-        const result = await lambdaResponse.json()
-        return NextResponse.json(result)
-      } catch (lambdaError) {
-        console.error('[PostCall] Lambda forward failed:', lambdaError)
-      }
-    }
+    // NOTE: Do NOT forward to Lambda here. ElevenLabs should call the Lambda
+    // Function URL directly to avoid duplicate processing (double audio uploads).
+    // Lambda Function URL: https://o3wvj7vydnhiwwoiv4bjx6vida0wwjku.lambda-url.us-east-1.on.aws/
 
     return NextResponse.json({
       success: true,
-      message: 'Post-call data received. Configure ElevenLabs to point directly to Lambda for full processing.',
+      message: 'Post-call webhook received. Processing handled by Lambda Function URL directly.',
     })
   } catch (error) {
     console.error('[PostCall] Error:', error)

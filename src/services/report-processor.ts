@@ -13,6 +13,7 @@
 
 import {
   getReportRepository,
+  getEmployeeRepository,
   type DailyReport,
   type EmployeeHours,
   type Delivery,
@@ -46,27 +47,53 @@ export async function processReport(data: RoxyWebhookData): Promise<ProcessingRe
 
   try {
     const reportRepo = getReportRepository()
+    const employeeRepo = getEmployeeRepository()
 
-    // Process employees
-    const employeeHours: EmployeeHours[] = data.employees.map((emp) => {
+    // Load employee roster for name matching
+    let rosterEmployees: Awaited<ReturnType<typeof employeeRepo.getAllActive>> = []
+    try {
+      rosterEmployees = await employeeRepo.getAllActive()
+      console.log(`[ReportProcessor] Loaded ${rosterEmployees.length} employees from roster`)
+    } catch (rosterError) {
+      warnings.push('Could not load employee roster for name matching')
+      console.warn('[ReportProcessor] Failed to load roster:', rosterError)
+    }
+
+    // Process employees with name matching against roster
+    const employeeHours: EmployeeHours[] = []
+    for (const emp of data.employees) {
       const regularHours = Number(emp.regular_hours) || 0
       const overtimeHours = Number(emp.overtime_hours) || 0
       const totalHours = regularHours + overtimeHours
 
+      let normalizedName = emp.name
+      let matched = false
+
+      if (rosterEmployees.length > 0) {
+        // Try fuzzy match against roster
+        const matchResult = await employeeRepo.fuzzyMatch(emp.name, 0.5)
+        if (matchResult) {
+          normalizedName = matchResult.name
+          matched = true
+        } else {
+          warnings.push(`No roster match for "${emp.name}" — using as-is`)
+        }
+      }
+
       processedEmployees.push({
         original: emp.name,
-        normalized: emp.name,
-        matched: true,
+        normalized: normalizedName,
+        matched,
       })
 
-      return {
+      employeeHours.push({
         name: emp.name,
-        normalizedName: emp.name,
+        normalizedName,
         regularHours,
         overtimeHours,
         totalHours,
-      }
-    })
+      })
+    }
 
     // Process other fields
     const deliveries: Delivery[] | undefined = data.deliveries?.map((d) => ({
