@@ -6,17 +6,29 @@ import { NextResponse } from 'next/server'
  * REMOVE THIS AFTER DEBUGGING
  */
 export async function GET() {
+  // Check ALL env vars with AWS or credential-related prefixes
+  const credentialVars = Object.entries(process.env)
+    .filter(([k]) =>
+      k.startsWith('AWS_') ||
+      k.includes('CREDENTIAL') ||
+      k.includes('ROLE') ||
+      k.includes('TOKEN') ||
+      k.includes('IDENTITY') ||
+      k.startsWith('AMPLIFY_') ||
+      k.startsWith('_AWS') ||
+      k === 'DYNAMODB_TABLE_NAME' ||
+      k === 'DYNAMO_REGION' ||
+      k === 'DATA_ADAPTER'
+    )
+    .map(([k, v]) => {
+      // Mask secret values
+      if (k.includes('SECRET') || k.includes('KEY') || k.includes('TOKEN') || k.includes('CREDENTIAL')) {
+        return [k, v ? `***${v.slice(-4)}` : 'undefined']
+      }
+      return [k, v]
+    })
+
   return NextResponse.json({
-    hasAccessKey: !!process.env.AWS_ACCESS_KEY_ID,
-    hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY,
-    hasSessionToken: !!process.env.AWS_SESSION_TOKEN,
-    hasRegion: !!process.env.AWS_REGION,
-    hasDynamoRegion: !!process.env.DYNAMO_REGION,
-    dynamoTable: process.env.DYNAMODB_TABLE_NAME,
-    dataAdapter: process.env.DATA_ADAPTER,
-    awsExecutionEnv: process.env.AWS_EXECUTION_ENV,
-    awsLambdaFunctionName: process.env.AWS_LAMBDA_FUNCTION_NAME,
-    // Check for Amplify-specific vars
-    amplifyEnvVars: Object.keys(process.env).filter(k => k.startsWith('AMPLIFY_')),
+    credentialVars: Object.fromEntries(credentialVars),
   })
 }
