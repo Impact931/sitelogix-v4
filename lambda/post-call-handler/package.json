@@ -4,6 +4,8 @@
   "description": "Lambda function to handle ElevenLabs post-call webhook",
   "main": "index.js",
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0",
     "googleapis": "^126.0.0"
   }
 }

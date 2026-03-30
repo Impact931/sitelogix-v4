@@ -72,8 +72,10 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const API_BASE = process.env.NEXT_PUBLIC_ADMIN_API_URL || 'https://dor3wzjhjja3zwzshurzjt4laq0uiztn.lambda-url.us-east-1.on.aws'
+
   useEffect(() => {
-    fetch(`/api/admin/reports/${id}`)
+    fetch(`${API_BASE}/reports/${id}`)
       .then((res) => {
         if (!res.ok) throw new Error('Report not found')
         return res.json()

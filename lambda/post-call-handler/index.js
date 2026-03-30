@@ -11,6 +11,8 @@
 const { google } = require('googleapis');
 const https = require('https');
 const { Readable } = require('stream');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 
 // Environment variables
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -20,6 +22,13 @@ const GOOGLE_SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
 const GOOGLE_DRIVE_AUDIO_FOLDER = process.env.GOOGLE_DRIVE_AUDIO_FOLDER || '1QfnjfPbsGCJDSDH04o7nqwl0TiRosXD7';
 const GOOGLE_DRIVE_TRANSCRIPTS_FOLDER = process.env.GOOGLE_DRIVE_TRANSCRIPTS_FOLDER || '1mTBMlD7ksiJSu9Qh-vnjjPB6hGIiaArf';
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+const DYNAMODB_TABLE_NAME = process.env.DYNAMODB_TABLE_NAME || 'sitelogix-v4-reports';
+
+// DynamoDB client
+const dynamoClient = DynamoDBDocumentClient.from(
+  new DynamoDBClient({ region: 'us-east-1' }),
+  { marshallOptions: { removeUndefinedValues: true } }
+);
 
 // Initialize Google Auth
 function getGoogleAuth() {
@@ -475,6 +484,19 @@ async function batchProcess(auth) {
 
       if (audioUrl || transcriptUrl) {
         await updateSpecificReport(auth, report.id, report.rowIndices, audioUrl, transcriptUrl);
+
+        // Sync to DynamoDB
+        try {
+          const convDetails = await getConversationDetails(bestMatch.conversation_id);
+          const transcript = convDetails.transcript || [];
+          const transcriptText = formatTranscript(transcript);
+          const callDurationSecs = convDetails.metadata?.call_duration_secs || convDetails.call_duration_secs || null;
+          const reportData = await getRecentReportData(auth, report.id);
+          await writeToDynamoDB(report.id, bestMatch.conversation_id, transcript, transcriptText, audioUrl, transcriptUrl, callDurationSecs, reportData);
+        } catch (dynamoErr) {
+          console.error(`[DynamoDB] Batch sync failed for ${report.id}:`, dynamoErr.message);
+        }
+
         processed++;
         results.push({
           reportId: report.id,
@@ -489,6 +511,133 @@ async function batchProcess(auth) {
   }
 
   return { processed, results };
+}
+
+// Write/update report in DynamoDB with transcript and file URLs
+async function writeToDynamoDB(reportId, conversationId, transcript, transcriptText, audioUrl, transcriptUrl, callDurationSecs, reportData) {
+  const now = new Date().toISOString();
+
+  // Try to find existing report by looking at recent items
+  const existing = await dynamoClient.send(new QueryCommand({
+    TableName: DYNAMODB_TABLE_NAME,
+    IndexName: 'byDate',
+    KeyConditionExpression: 'entityType = :et',
+    ExpressionAttributeValues: { ':et': 'REPORT' },
+    ScanIndexForward: false,
+    Limit: 5,
+  }));
+
+  // Check if this reportId already exists
+  const existingItem = (existing.Items || []).find(i => i.reportId === reportId);
+
+  if (existingItem) {
+    // Update existing report with transcript + files
+    const updates = ['#updatedAt = :now'];
+    const names = { '#updatedAt': 'updatedAt' };
+    const values = { ':now': now };
+
+    if (transcript) {
+      updates.push('#transcript = :transcript');
+      names['#transcript'] = 'transcript';
+      values[':transcript'] = transcript;
+    }
+    if (transcriptText) {
+      updates.push('#transcriptText = :transcriptText');
+      names['#transcriptText'] = 'transcriptText';
+      values[':transcriptText'] = transcriptText;
+    }
+    if (audioUrl) {
+      updates.push('#audioUrl = :audioUrl');
+      names['#audioUrl'] = 'audioUrl';
+      values[':audioUrl'] = audioUrl;
+    }
+    if (transcriptUrl) {
+      updates.push('#transcriptUrl = :transcriptUrl');
+      names['#transcriptUrl'] = 'transcriptUrl';
+      values[':transcriptUrl'] = transcriptUrl;
+    }
+    if (conversationId) {
+      updates.push('#conversationId = :conversationId');
+      names['#conversationId'] = 'conversationId';
+      values[':conversationId'] = conversationId;
+    }
+    if (callDurationSecs) {
+      updates.push('#callDurationSecs = :callDurationSecs');
+      names['#callDurationSecs'] = 'callDurationSecs';
+      values[':callDurationSecs'] = callDurationSecs;
+    }
+
+    await dynamoClient.send(new UpdateCommand({
+      TableName: DYNAMODB_TABLE_NAME,
+      Key: { reportId },
+      UpdateExpression: `SET ${updates.join(', ')}`,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values,
+    }));
+    console.log(`[DynamoDB] Updated report: ${reportId}`);
+  } else {
+    // Create new report in DynamoDB from Sheets data + transcript
+    const item = {
+      reportId,
+      entityType: 'REPORT',
+      submittedAt: now,
+      jobSite: reportData?.jobSite || 'Unknown',
+      timezone: 'America/New_York',
+      employees: reportData?.employees || [],
+      transcript,
+      transcriptText,
+      audioUrl,
+      transcriptUrl,
+      conversationId,
+      callDurationSecs,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await dynamoClient.send(new PutCommand({
+      TableName: DYNAMODB_TABLE_NAME,
+      Item: item,
+    }));
+    console.log(`[DynamoDB] Created report: ${reportId}`);
+  }
+}
+
+// Read the most recent report data from Google Sheets for DynamoDB sync
+async function getRecentReportData(auth, reportId) {
+  const sheets = google.sheets({ version: 'v4', auth });
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: GOOGLE_SHEETS_ID,
+    range: "'Main Report Log'!A:Q",
+  });
+
+  const rows = response.data.values || [];
+  const employees = [];
+  let jobSite = 'Unknown';
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (row[16] === reportId) {
+      jobSite = row[1] || jobSite;
+      employees.push({
+        name: row[2] || 'Unknown',
+        normalizedName: row[2] || 'Unknown',
+        regularHours: Number(row[3]) || 0,
+        overtimeHours: Number(row[4]) || 0,
+        totalHours: (Number(row[3]) || 0) + (Number(row[4]) || 0),
+      });
+    }
+  }
+
+  return {
+    jobSite,
+    employees,
+    deliveriesText: rows.find(r => r[16] === reportId)?.[5] || undefined,
+    equipmentText: rows.find(r => r[16] === reportId)?.[6] || undefined,
+    safetyText: rows.find(r => r[16] === reportId)?.[7] || undefined,
+    weatherConditions: rows.find(r => r[16] === reportId)?.[8] || undefined,
+    shortages: rows.find(r => r[16] === reportId)?.[9] || undefined,
+    notes: rows.find(r => r[16] === reportId)?.[13] || undefined,
+  };
 }
 
 // Main handler
@@ -557,9 +706,38 @@ exports.handler = async (event) => {
     );
 
     // Update Google Sheet
+    let reportId = null;
     if (audioUrl || transcriptUrl) {
-      const reportId = await updateReportWithFiles(auth, audioUrl, transcriptUrl);
+      reportId = await updateReportWithFiles(auth, audioUrl, transcriptUrl);
       console.log('Updated report:', reportId);
+    }
+
+    // Write to DynamoDB (system of record)
+    try {
+      const details = await getConversationDetails(body.conversation_id);
+      const transcript = details.transcript || [];
+      const transcriptText = formatTranscript(transcript);
+      const callDurationSecs = details.metadata?.call_duration_secs || details.call_duration_secs || null;
+
+      // If we matched a report in Sheets, pull its data for DynamoDB
+      let reportData = null;
+      if (reportId) {
+        reportData = await getRecentReportData(auth, reportId);
+      }
+
+      await writeToDynamoDB(
+        reportId || `RPT-${Date.now()}`,
+        body.conversation_id,
+        transcript,
+        transcriptText,
+        audioUrl,
+        transcriptUrl,
+        callDurationSecs,
+        reportData
+      );
+      console.log('[DynamoDB] Write complete for conversation:', body.conversation_id);
+    } catch (dynamoError) {
+      console.error('[DynamoDB] Write failed (non-blocking):', dynamoError.message);
     }
 
     return {
@@ -569,6 +747,7 @@ exports.handler = async (event) => {
         conversation_id: body.conversation_id,
         audio_uploaded: !!audioUrl,
         transcript_uploaded: !!transcriptUrl,
+        dynamo_synced: true,
       }),
     };
   } catch (error) {

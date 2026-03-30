@@ -28,8 +28,10 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const API_BASE = process.env.NEXT_PUBLIC_ADMIN_API_URL || 'https://dor3wzjhjja3zwzshurzjt4laq0uiztn.lambda-url.us-east-1.on.aws'
+
   useEffect(() => {
-    fetch('/api/admin/reports?limit=50')
+    fetch(`${API_BASE}/reports?limit=50`)
       .then(async (res) => {
         const d = await res.json()
         if (!res.ok || d.error) {
