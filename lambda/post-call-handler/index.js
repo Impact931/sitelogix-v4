@@ -492,7 +492,8 @@ async function batchProcess(auth) {
           const transcriptText = formatTranscript(transcript);
           const callDurationSecs = convDetails.metadata?.call_duration_secs || convDetails.call_duration_secs || null;
           const reportData = await getRecentReportData(auth, report.id);
-          await writeToDynamoDB(report.id, bestMatch.conversation_id, transcript, transcriptText, audioUrl, transcriptUrl, callDurationSecs, reportData);
+          const transcriptReportData = extractReportDataFromTranscript(transcript);
+          await writeToDynamoDB(report.id, bestMatch.conversation_id, transcript, transcriptText, audioUrl, transcriptUrl, callDurationSecs, reportData, transcriptReportData);
         } catch (dynamoErr) {
           console.error(`[DynamoDB] Batch sync failed for ${report.id}:`, dynamoErr.message);
         }
@@ -514,7 +515,7 @@ async function batchProcess(auth) {
 }
 
 // Write/update report in DynamoDB with transcript and file URLs
-async function writeToDynamoDB(reportId, conversationId, transcript, transcriptText, audioUrl, transcriptUrl, callDurationSecs, reportData) {
+async function writeToDynamoDB(reportId, conversationId, transcript, transcriptText, audioUrl, transcriptUrl, callDurationSecs, reportData, transcriptReportData) {
   const now = new Date().toISOString();
 
   // Try to find existing report by looking at recent items
@@ -531,41 +532,45 @@ async function writeToDynamoDB(reportId, conversationId, transcript, transcriptT
   const existingItem = (existing.Items || []).find(i => i.reportId === reportId);
 
   if (existingItem) {
-    // Update existing report with transcript + files
+    // Update existing report with transcript + files + structured data
+    const rd = transcriptReportData || {};
+    const employees = reportData?.employees || existingItem.employees || [];
+    const summary = generateReportSummary(rd, employees, callDurationSecs);
+
     const updates = ['#updatedAt = :now'];
     const names = { '#updatedAt': 'updatedAt' };
     const values = { ':now': now };
 
-    if (transcript) {
-      updates.push('#transcript = :transcript');
-      names['#transcript'] = 'transcript';
-      values[':transcript'] = transcript;
-    }
-    if (transcriptText) {
-      updates.push('#transcriptText = :transcriptText');
-      names['#transcriptText'] = 'transcriptText';
-      values[':transcriptText'] = transcriptText;
-    }
-    if (audioUrl) {
-      updates.push('#audioUrl = :audioUrl');
-      names['#audioUrl'] = 'audioUrl';
-      values[':audioUrl'] = audioUrl;
-    }
-    if (transcriptUrl) {
-      updates.push('#transcriptUrl = :transcriptUrl');
-      names['#transcriptUrl'] = 'transcriptUrl';
-      values[':transcriptUrl'] = transcriptUrl;
-    }
-    if (conversationId) {
-      updates.push('#conversationId = :conversationId');
-      names['#conversationId'] = 'conversationId';
-      values[':conversationId'] = conversationId;
-    }
-    if (callDurationSecs) {
-      updates.push('#callDurationSecs = :callDurationSecs');
-      names['#callDurationSecs'] = 'callDurationSecs';
-      values[':callDurationSecs'] = callDurationSecs;
-    }
+    // Helper to add field to update expression
+    const addField = (field, value) => {
+      if (value !== undefined && value !== null) {
+        const placeholder = `:${field}`;
+        const nameKey = `#${field}`;
+        updates.push(`${nameKey} = ${placeholder}`);
+        names[nameKey] = field;
+        values[placeholder] = value;
+      }
+    };
+
+    addField('transcript', transcript);
+    addField('transcriptText', transcriptText);
+    addField('audioUrl', audioUrl);
+    addField('transcriptUrl', transcriptUrl);
+    addField('conversationId', conversationId);
+    addField('callDurationSecs', callDurationSecs);
+    addField('summary', summary);
+
+    // Structured report fields from transcript tool call
+    if (rd.workPerformed?.length) addField('workPerformed', rd.workPerformed);
+    if (rd.deliveries?.length) addField('deliveries', rd.deliveries);
+    if (rd.equipment?.length) addField('equipment', rd.equipment);
+    if (rd.safety?.length) addField('safety', rd.safety);
+    if (rd.delays?.length) addField('delays', rd.delays);
+    if (rd.subcontractors?.length) addField('subcontractors', rd.subcontractors);
+    if (rd.weatherConditions) addField('weatherConditions', rd.weatherConditions);
+    if (rd.weatherImpact) addField('weatherImpact', rd.weatherImpact);
+    if (rd.shortages || reportData?.shortages) addField('shortages', rd.shortages || reportData.shortages);
+    if (rd.notes || reportData?.notes) addField('notes', rd.notes || reportData.notes);
 
     await dynamoClient.send(new UpdateCommand({
       TableName: DYNAMODB_TABLE_NAME,
@@ -576,14 +581,31 @@ async function writeToDynamoDB(reportId, conversationId, transcript, transcriptT
     }));
     console.log(`[DynamoDB] Updated report: ${reportId}`);
   } else {
-    // Create new report in DynamoDB from Sheets data + transcript
+    // Merge data: transcript tool call data is richest, fall back to Sheets data
+    const rd = transcriptReportData || {};
+    const employees = reportData?.employees || [];
+    const summary = generateReportSummary(rd, employees, callDurationSecs);
+
     const item = {
       reportId,
       entityType: 'REPORT',
       submittedAt: now,
-      jobSite: reportData?.jobSite || 'Unknown',
+      jobSite: rd.jobSite || reportData?.jobSite || 'Unknown',
       timezone: 'America/New_York',
-      employees: reportData?.employees || [],
+      employees,
+      // Structured fields from transcript tool call
+      workPerformed: rd.workPerformed?.length ? rd.workPerformed : undefined,
+      deliveries: rd.deliveries?.length ? rd.deliveries : undefined,
+      equipment: rd.equipment?.length ? rd.equipment : undefined,
+      safety: rd.safety?.length ? rd.safety : undefined,
+      delays: rd.delays?.length ? rd.delays : undefined,
+      subcontractors: rd.subcontractors?.length ? rd.subcontractors : undefined,
+      weatherConditions: rd.weatherConditions || reportData?.weatherConditions || undefined,
+      weatherImpact: rd.weatherImpact || undefined,
+      shortages: rd.shortages || reportData?.shortages || undefined,
+      notes: rd.notes || reportData?.notes || undefined,
+      summary,
+      // Files & transcript
       transcript,
       transcriptText,
       audioUrl,
@@ -593,6 +615,9 @@ async function writeToDynamoDB(reportId, conversationId, transcript, transcriptT
       createdAt: now,
       updatedAt: now,
     };
+
+    // Remove undefined values (DynamoDB doesn't like them)
+    Object.keys(item).forEach(k => { if (item[k] === undefined) delete item[k]; });
 
     await dynamoClient.send(new PutCommand({
       TableName: DYNAMODB_TABLE_NAME,
@@ -669,6 +694,144 @@ function matchEmployeeName(spokenName, roster) {
 
   // No match found — return original
   return spokenName;
+}
+
+// Extract structured report data from the transcript's submit_daily_report tool call
+// This is the richest data source — contains all fields Roxy collected during the call
+function extractReportDataFromTranscript(transcript) {
+  if (!transcript || !Array.isArray(transcript)) return null;
+
+  for (const entry of transcript) {
+    if (!entry.tool_calls || !Array.isArray(entry.tool_calls)) continue;
+    for (const tc of entry.tool_calls) {
+      if (tc.tool_name !== 'submit_daily_report') continue;
+
+      let params = null;
+      try {
+        // Try params_as_json first (cleaner), fall back to tool_details.body
+        if (tc.params_as_json) {
+          params = typeof tc.params_as_json === 'string' ? JSON.parse(tc.params_as_json) : tc.params_as_json;
+        } else if (tc.tool_details?.body) {
+          params = typeof tc.tool_details.body === 'string' ? JSON.parse(tc.tool_details.body) : tc.tool_details.body;
+        }
+      } catch (e) {
+        console.warn('[ExtractReport] Failed to parse tool call params:', e.message);
+        continue;
+      }
+
+      if (!params) continue;
+
+      console.log('[ExtractReport] Found submit_daily_report data:', JSON.stringify(params).substring(0, 300));
+
+      // Convert snake_case from ElevenLabs to camelCase for DynamoDB
+      return {
+        jobSite: params.job_site,
+        workPerformed: (params.work_performed || []).map(w => ({
+          description: w.description,
+          area: w.area || undefined,
+        })),
+        deliveries: (params.deliveries || []).map(d => ({
+          vendor: d.vendor,
+          material: d.material,
+          quantity: d.quantity || undefined,
+          notes: d.notes || undefined,
+        })),
+        equipment: (params.equipment || []).map(e => ({
+          name: e.name,
+          hours: e.hours || undefined,
+          notes: e.notes || undefined,
+        })),
+        safety: (params.safety || []).map(s => ({
+          type: s.type,
+          description: s.description,
+          actionTaken: s.action_taken || undefined,
+        })),
+        delays: (params.delays || []).map(d => ({
+          reason: d.reason,
+          duration: d.duration || undefined,
+          impact: d.impact || undefined,
+        })),
+        subcontractors: (params.subcontractors || []).map(s => ({
+          company: s.company,
+          trade: s.trade || undefined,
+          headcount: s.headcount || undefined,
+          workPerformed: s.work_performed || undefined,
+        })),
+        weatherConditions: params.weather_conditions || undefined,
+        weatherImpact: params.weather_impact || undefined,
+        shortages: params.shortages || undefined,
+        notes: params.notes || undefined,
+      };
+    }
+  }
+
+  return null;
+}
+
+// Generate a foreman-friendly summary from structured report data
+function generateReportSummary(reportData, employees, callDurationSecs) {
+  const parts = [];
+
+  // Crew summary
+  if (employees && employees.length > 0) {
+    const totalHours = employees.reduce((s, e) => s + (e.totalHours || 0), 0);
+    const totalOT = employees.reduce((s, e) => s + (e.overtimeHours || 0), 0);
+    let crewLine = `${employees.length}-person crew logged ${totalHours} total hours`;
+    if (totalOT > 0) crewLine += ` (${totalOT} OT)`;
+    parts.push(crewLine);
+  }
+
+  // Work performed
+  if (reportData?.workPerformed?.length > 0) {
+    const workItems = reportData.workPerformed.map(w => {
+      let desc = w.description;
+      if (w.area) desc += ` (${w.area})`;
+      return desc;
+    });
+    parts.push(`Work: ${workItems.join('; ')}`);
+  }
+
+  // Safety
+  if (reportData?.safety?.length > 0) {
+    const incidents = reportData.safety.filter(s => s.type === 'incident');
+    const nearMisses = reportData.safety.filter(s => s.type === 'near_miss');
+    const hazards = reportData.safety.filter(s => s.type === 'hazard');
+    const safetyParts = [];
+    if (incidents.length > 0) safetyParts.push(`${incidents.length} incident(s): ${incidents.map(i => i.description).join('; ')}`);
+    if (nearMisses.length > 0) safetyParts.push(`${nearMisses.length} near miss(es)`);
+    if (hazards.length > 0) safetyParts.push(`${hazards.length} hazard(s)`);
+    if (safetyParts.length > 0) parts.push(`Safety: ${safetyParts.join('. ')}`);
+  }
+
+  // Weather
+  if (reportData?.weatherConditions) {
+    let weatherLine = `Weather: ${reportData.weatherConditions}`;
+    if (reportData.weatherImpact) weatherLine += ` — ${reportData.weatherImpact}`;
+    parts.push(weatherLine);
+  }
+
+  // Deliveries
+  if (reportData?.deliveries?.length > 0) {
+    const deliveryItems = reportData.deliveries.map(d => `${d.vendor} (${d.material})`);
+    parts.push(`Deliveries: ${deliveryItems.join(', ')}`);
+  }
+
+  // Delays
+  if (reportData?.delays?.length > 0) {
+    const delayItems = reportData.delays.map(d => {
+      let desc = d.reason;
+      if (d.duration) desc += ` (${d.duration})`;
+      return desc;
+    });
+    parts.push(`Delays: ${delayItems.join('; ')}`);
+  }
+
+  // Shortages
+  if (reportData?.shortages) {
+    parts.push(`Shortages: ${reportData.shortages}`);
+  }
+
+  return parts.join('. ') + '.';
 }
 
 // Read the most recent report data from Google Sheets for DynamoDB sync
@@ -820,6 +983,9 @@ exports.handler = async (event) => {
         reportData = await getRecentReportData(auth, reportId);
       }
 
+      // Extract structured data from transcript tool call
+      const transcriptReportData = extractReportDataFromTranscript(transcript);
+
       await writeToDynamoDB(
         reportId || `RPT-${Date.now()}`,
         convData.conversation_id,
@@ -828,7 +994,8 @@ exports.handler = async (event) => {
         audioUrl,
         transcriptUrl,
         callDurationSecs,
-        reportData
+        reportData,
+        transcriptReportData
       );
       console.log('[DynamoDB] Write complete for conversation:', convData.conversation_id);
     } catch (dynamoError) {

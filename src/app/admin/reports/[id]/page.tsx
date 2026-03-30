@@ -56,6 +56,7 @@ interface ReportDetail {
   weatherImpact?: string
   shortages?: string
   notes?: string
+  summary?: string
   audioUrl?: string
   transcriptUrl?: string
   transcript?: TranscriptEntry[]
@@ -214,6 +215,18 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
       {/* TAB: Daily Field Report (Foreman / Boss view) */}
       {activeTab === 'daily' && (
         <div className="space-y-5">
+          {/* Executive Summary */}
+          {report.summary && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 bg-[#1e3a5f]/5">
+                <h4 className="text-sm font-semibold text-[#1e3a5f] uppercase tracking-wide">Daily Summary</h4>
+              </div>
+              <div className="px-5 py-4">
+                <p className="text-sm text-gray-800 leading-relaxed">{report.summary}</p>
+              </div>
+            </div>
+          )}
+
           {/* Alerts Banner */}
           {(hasSafetyIssues || hasDelays) && (
             <div className={`rounded-xl border-2 p-4 ${hasSafetyIssues ? 'border-red-300 bg-red-50' : 'border-amber-300 bg-amber-50'}`}>
