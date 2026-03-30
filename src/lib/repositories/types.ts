@@ -222,7 +222,7 @@ export interface FileRepository {
 // ADAPTER TYPES
 // ============================================
 
-export type DataAdapterType = 'postgres' | 'google'
+export type DataAdapterType = 'dynamodb' | 'google'
 export type FileAdapterType = 'local' | 'google' | 's3'
 
 export interface AdapterConfig {
