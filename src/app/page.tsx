@@ -125,32 +125,63 @@ export default function Home() {
         )}
 
         {state === 'complete' && (
-          <div className="flex flex-col items-center gap-6">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
-              <svg
-                className="h-10 w-10 text-green-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
+          <div className="flex flex-col items-center gap-6 animate-in fade-in">
+            {/* Animated checkmark */}
+            <div className="relative">
+              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-green-100 shadow-lg shadow-green-100/50">
+                <svg
+                  className="h-12 w-12 text-green-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              </div>
+              <div className="absolute inset-0 h-24 w-24 rounded-full bg-green-200 animate-ping opacity-20" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900">Report Submitted!</h2>
-            <p className="text-gray-600">
-              Your daily report has been saved.
-            </p>
-            <button
-              onClick={() => setState('idle')}
-              className="flex h-12 items-center justify-center rounded-xl bg-blue-600 px-8 text-white transition-colors hover:bg-blue-700 active:bg-blue-800"
-            >
-              Start New Report
-            </button>
+
+            <div className="text-center space-y-2">
+              <h2 className="text-2xl font-bold text-gray-900">Report Submitted!</h2>
+              <p className="text-gray-600 max-w-xs">
+                Your daily report has been saved to the system. Audio recording and transcript are being processed.
+              </p>
+            </div>
+
+            {/* Processing status */}
+            <div className="w-full max-w-xs bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 space-y-2.5">
+                <StatusRow icon="check" label="Report data saved" done />
+                <StatusRow icon="check" label="Hours logged to payroll" done />
+                <StatusRow icon="spinner" label="Recording uploading..." />
+                <StatusRow icon="spinner" label="Transcript processing..." />
+              </div>
+              <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100">
+                <p className="text-xs text-gray-500 text-center">
+                  Files will be available in the admin dashboard shortly
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center gap-3 w-full max-w-xs">
+              <button
+                onClick={() => setState('idle')}
+                className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-8 text-lg font-semibold text-white shadow-lg transition-all hover:bg-blue-700 active:scale-95 active:bg-blue-800"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Submit Another Report
+              </button>
+              <p className="text-xs text-gray-400">
+                You&apos;re all set for today. See you tomorrow!
+              </p>
+            </div>
           </div>
         )}
 
@@ -171,6 +202,21 @@ export default function Home() {
       <footer className="absolute bottom-4 text-sm text-gray-400">
         Parkway Construction
       </footer>
+    </div>
+  )
+}
+
+function StatusRow({ icon, label, done = false }: { icon: 'check' | 'spinner'; label: string; done?: boolean }) {
+  return (
+    <div className="flex items-center gap-3">
+      {done ? (
+        <svg className="h-4 w-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      ) : (
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600 flex-shrink-0" />
+      )}
+      <span className={`text-sm ${done ? 'text-gray-700' : 'text-gray-500'}`}>{label}</span>
     </div>
   )
 }
