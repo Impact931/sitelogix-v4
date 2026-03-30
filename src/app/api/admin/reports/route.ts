@@ -13,7 +13,10 @@ export async function GET(request: NextRequest) {
     const limit = Number(searchParams.get('limit')) || 20
     const site = searchParams.get('site')
 
+    console.log('[AdminAPI] Fetching reports:', { limit, site })
+
     const repo = getReportRepository()
+    console.log('[AdminAPI] Got repository instance')
 
     let reports
     if (site) {
@@ -23,6 +26,8 @@ export async function GET(request: NextRequest) {
     } else {
       reports = await repo.getRecentReports(limit)
     }
+
+    console.log('[AdminAPI] Got reports:', reports.length)
 
     // Calculate summary stats
     const totalEmployees = reports.reduce((sum, r) => sum + r.employees.length, 0)
@@ -54,7 +59,12 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('[AdminAPI] Error fetching reports:', error)
-    return NextResponse.json({ error: 'Failed to fetch reports' }, { status: 500 })
+    const msg = error instanceof Error ? error.message : String(error)
+    const stack = error instanceof Error ? error.stack : undefined
+    console.error('[AdminAPI] Error fetching reports:', msg, stack)
+    return NextResponse.json(
+      { error: 'Failed to fetch reports', detail: msg },
+      { status: 500 }
+    )
   }
 }

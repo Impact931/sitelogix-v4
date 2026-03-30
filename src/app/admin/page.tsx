@@ -30,7 +30,13 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetch('/api/admin/reports?limit=50')
-      .then((res) => res.json())
+      .then(async (res) => {
+        const d = await res.json()
+        if (!res.ok || d.error) {
+          throw new Error(d.detail || d.error || `HTTP ${res.status}`)
+        }
+        return d
+      })
       .then((d) => {
         setData(d)
         setLoading(false)
