@@ -49,25 +49,29 @@ export class GoogleSheetsReportRepository implements ReportRepository {
 
     // Write to Main Report Log - one row per employee
     // Columns: A-Q (17 columns)
-    const mainLogRows = report.employees.map((emp) => [
-      timestamp,                          // A: Timestamp
-      report.jobSite || '',               // B: Job Site
-      emp.normalizedName,                 // C: Employee Name
-      emp.regularHours,                   // D: Regular Hours
-      emp.overtimeHours,                  // E: OT Hours
-      deliveriesText,                     // F: Deliveries
-      equipmentText,                      // G: Equipment
-      safetyText,                         // H: Safety
-      weatherText,                        // I: Weather
-      report.shortages || '',             // J: Shortages
-      report.audioUrl || '',              // K: Audio Link
-      report.transcriptUrl || '',         // L: Transcript Link
-      delaysText,                         // M: Delays
-      report.notes || '',                 // N: Notes
-      subcontractorsText,                 // O: Subcontractors
-      workText,                           // P: Work Performed
-      reportId,                           // Q: Report ID
-    ])
+    // Safety text only goes on the row of the employee mentioned in the incident
+    const mainLogRows = report.employees.map((emp) => {
+      const empSafetyText = this.getSafetyForEmployee(report.safety, emp.normalizedName, report.employees.length)
+      return [
+        timestamp,                          // A: Timestamp
+        report.jobSite || '',               // B: Job Site
+        emp.normalizedName,                 // C: Employee Name
+        emp.regularHours,                   // D: Regular Hours
+        emp.overtimeHours,                  // E: OT Hours
+        deliveriesText,                     // F: Deliveries
+        equipmentText,                      // G: Equipment
+        empSafetyText,                      // H: Safety (per-employee)
+        weatherText,                        // I: Weather
+        report.shortages || '',             // J: Shortages
+        report.audioUrl || '',              // K: Audio Link
+        report.transcriptUrl || '',         // L: Transcript Link
+        delaysText,                         // M: Delays
+        report.notes || '',                 // N: Notes
+        subcontractorsText,                 // O: Subcontractors
+        workText,                           // P: Work Performed
+        reportId,                           // Q: Report ID
+      ]
+    })
 
     await this.sheets.spreadsheets.values.append({
       spreadsheetId: this.spreadsheetId,
@@ -155,6 +159,41 @@ export class GoogleSheetsReportRepository implements ReportRepository {
         return text
       })
       .join('; ')
+  }
+
+  /**
+   * Get safety text for a specific employee.
+   * Only includes safety entries that mention this employee's name.
+   * If no name match is found and there's only 1 employee, they get all safety entries.
+   */
+  private getSafetyForEmployee(safety: SafetyEntry[] | undefined, employeeName: string, totalEmployees: number): string {
+    if (!safety || safety.length === 0) return ''
+
+    const positiveOnly = safety.every((s) => s.type === 'positive')
+    if (positiveOnly) return ''
+
+    // Match safety entries to this employee by checking if the description mentions their name
+    const nameParts = employeeName.toLowerCase().split(/\s+/)
+    const firstName = nameParts[0]
+
+    const matched = safety.filter((s) => {
+      const desc = s.description.toLowerCase()
+      // Check full name or first name
+      return desc.includes(employeeName.toLowerCase()) || desc.includes(firstName)
+    })
+
+    // If only 1 employee on the report, they get all safety entries
+    // If no entries matched anyone, put them on the first employee row (handled by caller seeing empty)
+    if (matched.length > 0) {
+      return this.formatSafety(matched)
+    }
+
+    // If single-person crew, give all safety to them
+    if (totalEmployees === 1) {
+      return this.formatSafety(safety)
+    }
+
+    return ''
   }
 
   /**
