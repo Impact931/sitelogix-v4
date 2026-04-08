@@ -4,15 +4,13 @@
  * Implements ReportRepository interface using Google Sheets API.
  * Writes to "Main Report Log" and "Payroll Summary" tabs.
  *
- * Main Report Log Columns (19 columns A-S):
- *
- * EXISTING (A-M — matches current sheet headers):
+ * Main Report Log Columns (18 columns A-R):
  * A: Timestamp | B: Job Site | C: Employee Name | D: Regular Hours | E: OT Hours
  * F: Work Performed | G: Deliveries | H: Equipment | I: Safety | J: Weather
  * K: Audio Recording | L: Transcripts Link | M: Report ID
+ * N: Delays | O: Shortages | P: Subcontractors | Q: Notes | R: Total Hours
  *
- * NEW (N-S — added by v2 update):
- * N: Delays | O: Shortages | P: Subcontractors | Q: Notes | R: Other | S: Total Hours
+ * All text fields use natural language (readable by a foreman, not coded).
  */
 
 import type {
@@ -51,8 +49,11 @@ export class GoogleSheetsReportRepository implements ReportRepository {
       .filter(Boolean)
       .join(' - ') || ''
 
+    // Combine notes and other into a single natural language field
+    const notesText = [report.notes, report.other].filter(Boolean).join('. ') || ''
+
     // Write to Main Report Log - one row per employee
-    // Columns A-M match existing sheet headers, N-S are new columns
+    // Columns A-R (18 columns), all text fields in natural language
     const mainLogRows = report.employees.map((emp) => {
       const empSafetyText = this.getSafetyForEmployee(report.safety, emp.normalizedName, report.employees.length)
       return [
@@ -72,15 +73,14 @@ export class GoogleSheetsReportRepository implements ReportRepository {
         delaysText || 'None',                               // N: Delays
         report.shortages || 'None',                         // O: Shortages
         subcontractorsText || 'None',                       // P: Subcontractors
-        report.notes || '',                                 // Q: Notes
-        report.other || '',                                 // R: Other
-        emp.totalHours,                                     // S: Total Hours
+        notesText,                                          // Q: Notes
+        emp.totalHours,                                     // R: Total Hours
       ]
     })
 
     await this.sheets.spreadsheets.values.append({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A:S`,
+      range: `'${this.mainLogTab}'!A:R`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: mainLogRows,
@@ -114,56 +114,60 @@ export class GoogleSheetsReportRepository implements ReportRepository {
   // ============================================
 
   /**
-   * Format deliveries: "Ferguson: pipe (wrong size); ABC Supply: lumber"
+   * Format deliveries as natural language.
+   * "Ferguson delivered fittings. Missing connectors for the drains."
    */
   private formatDeliveries(deliveries: Delivery[] | undefined): string {
     if (!deliveries || deliveries.length === 0) return ''
     return deliveries
       .map((d) => {
-        let text = `${d.vendor}: ${d.material}`
+        let text = `${d.vendor} delivered ${d.material}`
         if (d.quantity) text += ` (${d.quantity})`
-        if (d.notes) text += ` - ${d.notes}`
+        if (d.notes) text += `. ${d.notes}`
         return text
       })
-      .join('; ')
+      .join('. ')
   }
 
   /**
-   * Format equipment: "Excavator (4 hrs); Crane (2 hrs)"
+   * Format equipment as natural language.
+   * "Excavator on site for 4 hours. Crane used for steel placement."
    */
   private formatEquipment(equipment: Equipment[] | undefined): string {
     if (!equipment || equipment.length === 0) return ''
     return equipment
       .map((e) => {
         let text = e.name
-        if (e.hours) text += ` (${e.hours} hrs)`
-        if (e.notes) text += ` - ${e.notes}`
+        if (e.hours) text += ` on site for ${e.hours} hours`
+        if (e.notes) text += ` — ${e.notes}`
         return text
       })
-      .join('; ')
+      .join('. ')
   }
 
   /**
-   * Format safety: "No incidents" or "Near miss: worker slipped; Hazard: loose railing"
+   * Format safety as natural language.
+   * "No incidents reported" or "INCIDENT: Corey fell off a small ladder — file incident report"
    */
   private formatSafety(safety: SafetyEntry[] | undefined): string {
     if (!safety || safety.length === 0) return ''
 
-    // Check if it's just a positive report
     const positiveOnly = safety.every((s) => s.type === 'positive')
     if (positiveOnly) {
-      return safety.map((s) => s.description).join('; ') || 'No incidents'
+      return 'No incidents reported'
     }
 
     return safety
       .map((s) => {
-        const typeLabel = s.type === 'near_miss' ? 'Near miss' :
-                         s.type.charAt(0).toUpperCase() + s.type.slice(1)
-        let text = `${typeLabel}: ${s.description}`
-        if (s.actionTaken) text += ` (Action: ${s.actionTaken})`
+        if (s.type === 'positive') return s.description
+        const label = s.type === 'near_miss' ? 'NEAR MISS' :
+                     s.type === 'hazard' ? 'HAZARD' : 'INCIDENT'
+        let text = `${label}: ${s.description}`
+        if (s.actionTaken) text += `. Action taken: ${s.actionTaken}`
+        if (s.type === 'incident') text += '. FILE INCIDENT REPORT.'
         return text
       })
-      .join('; ')
+      .join('. ')
   }
 
   /**
@@ -202,38 +206,41 @@ export class GoogleSheetsReportRepository implements ReportRepository {
   }
 
   /**
-   * Format delays: "Rain delay (2 hrs) - lost productivity; Waiting on materials (1 hr)"
+   * Format delays as natural language.
+   * "Missing connectors from delivery caused a two-week delay."
    */
   private formatDelays(delays: DelayEntry[] | undefined): string {
     if (!delays || delays.length === 0) return ''
     return delays
       .map((d) => {
         let text = d.reason
-        if (d.duration) text += ` (${d.duration})`
-        if (d.impact) text += ` - ${d.impact}`
+        if (d.duration) text += `, delayed ${d.duration}`
+        if (d.impact) text += `. ${d.impact}`
         return text
       })
-      .join('; ')
+      .join('. ')
   }
 
   /**
-   * Format subcontractors: "ABC Electric (3 workers) - wiring; XYZ Plumbing (2 workers)"
+   * Format subcontractors as natural language.
+   * "ABC Electric had 3 workers on site doing rough-in wiring."
    */
   private formatSubcontractors(subs: Subcontractor[] | undefined): string {
     if (!subs || subs.length === 0) return ''
     return subs
       .map((s) => {
         let text = s.company
-        if (s.headcount) text += ` (${s.headcount} workers)`
-        if (s.trade) text += ` - ${s.trade}`
-        if (s.workPerformed) text += `: ${s.workPerformed}`
+        if (s.headcount) text += ` had ${s.headcount} workers on site`
+        if (s.trade) text += ` doing ${s.trade}`
+        if (s.workPerformed) text += ` — ${s.workPerformed}`
         return text
       })
-      .join('; ')
+      .join('. ')
   }
 
   /**
-   * Format work performed: "Framing (Building A); Electrical rough-in (Building B)"
+   * Format work performed as natural language.
+   * "Completed framing on Building A. Electrical rough-in on Building B."
    */
   private formatWorkPerformed(work: WorkEntry[] | undefined): string {
     if (!work || work.length === 0) return ''
@@ -273,7 +280,7 @@ export class GoogleSheetsReportRepository implements ReportRepository {
   async getReportsByDateRange(start: Date, end: Date): Promise<DailyReport[]> {
     const response = await this.sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A2:S`,
+      range: `'${this.mainLogTab}'!A2:R`,
     })
 
     const rows = response.data.values || []
@@ -339,7 +346,7 @@ export class GoogleSheetsReportRepository implements ReportRepository {
     // Find all rows with this report ID and update them
     const response = await this.sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A:S`,
+      range: `'${this.mainLogTab}'!A:R`,
     })
 
     const rows = response.data.values || []
@@ -402,7 +409,7 @@ export class GoogleSheetsReportRepository implements ReportRepository {
   async findRecentReportWithoutFiles(): Promise<{ id: string; rowIndices: number[] } | null> {
     const response = await this.sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A:S`,
+      range: `'${this.mainLogTab}'!A:R`,
     })
 
     const rows = response.data.values || []

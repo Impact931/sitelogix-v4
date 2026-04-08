@@ -179,7 +179,7 @@ async function updateReportWithFiles(auth, audioUrl, transcriptUrl) {
 
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: GOOGLE_SHEETS_ID,
-    range: "'Main Report Log'!A:S",
+    range: "'Main Report Log'!A:R",
   });
 
   const rows = response.data.values || [];
@@ -268,7 +268,7 @@ async function getReportsWithoutFiles(auth) {
 
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: GOOGLE_SHEETS_ID,
-    range: "'Main Report Log'!A:S",
+    range: "'Main Report Log'!A:R",
   });
 
   const rows = response.data.values || [];
@@ -840,7 +840,7 @@ function extractReportDataFromTranscript(transcript) {
         weatherConditions: params.weather_conditions || undefined,
         weatherImpact: params.weather_impact || undefined,
         shortages: params.shortages || undefined,
-        notes: params.notes || undefined,
+        notes: [params.notes, params.other].filter(Boolean).join('. ') || undefined,
       };
     }
   }
@@ -930,7 +930,7 @@ async function getRecentReportData(auth, reportId) {
 
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: GOOGLE_SHEETS_ID,
-    range: "'Main Report Log'!A:S",
+    range: "'Main Report Log'!A:R",
   });
 
   const rows = response.data.values || [];
@@ -969,7 +969,6 @@ async function getRecentReportData(auth, reportId) {
     shortages: matchedRow?.[14] || undefined,
     subcontractorsText: matchedRow?.[15] || undefined,
     notes: matchedRow?.[16] || undefined,
-    other: matchedRow?.[17] || undefined,
   };
 }
 

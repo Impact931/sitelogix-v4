@@ -113,6 +113,9 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   const totalOT = report.employees.reduce((sum, e) => sum + e.overtimeHours, 0)
   const hasSafetyIssues = (report.safety || []).some((s) => s.type !== 'positive')
   const hasDelays = (report.delays || []).length > 0
+  const hasShortages = !!report.shortages
+  const hasDeliveryIssues = (report.deliveries || []).some((d) => d.notes)
+  const hasAttentionItems = hasSafetyIssues || hasDelays || hasShortages || hasDeliveryIssues
 
   const submittedDate = new Date(report.submittedAt).toLocaleDateString('en-US', {
     timeZone: report.timezone || 'America/New_York',
@@ -227,35 +230,66 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
             </div>
           )}
 
-          {/* Alerts Banner */}
-          {(hasSafetyIssues || hasDelays) && (
-            <div className={`rounded-xl border-2 p-4 ${hasSafetyIssues ? 'border-red-300 bg-red-50' : 'border-amber-300 bg-amber-50'}`}>
-              <h3 className={`text-sm font-bold uppercase tracking-wide mb-2 ${hasSafetyIssues ? 'text-red-700' : 'text-amber-700'}`}>
+          {/* Alerts Banner — Attention Required */}
+          {hasAttentionItems && (
+            <div className={`rounded-xl border-2 p-5 ${hasSafetyIssues ? 'border-red-400 bg-red-50' : 'border-amber-400 bg-amber-50'}`}>
+              <h3 className={`text-sm font-bold uppercase tracking-wide mb-3 ${hasSafetyIssues ? 'text-red-800' : 'text-amber-800'}`}>
                 Attention Required
               </h3>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {report.safety?.filter(s => s.type !== 'positive').map((s, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className={`mt-0.5 inline-block w-2 h-2 rounded-full flex-shrink-0 ${
-                      s.type === 'incident' ? 'bg-red-500' : 'bg-amber-500'
-                    }`} />
+                  <div key={i} className="flex items-start gap-3 bg-white/70 rounded-lg p-3">
+                    <span className="mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 flex-shrink-0">
+                      <span className="w-2 h-2 rounded-full bg-red-500" />
+                    </span>
                     <div>
-                      <span className="text-sm font-medium">{s.type === 'incident' ? 'INCIDENT' : s.type === 'near_miss' ? 'NEAR MISS' : 'HAZARD'}:</span>{' '}
-                      <span className="text-sm">{s.description}</span>
-                      {s.actionTaken && <p className="text-xs text-gray-600 mt-0.5">Action Taken: {s.actionTaken}</p>}
+                      <span className="text-sm font-bold text-red-800">
+                        {s.type === 'incident' ? 'SAFETY INCIDENT' : s.type === 'near_miss' ? 'NEAR MISS' : 'HAZARD'}
+                      </span>
+                      <p className="text-sm text-gray-900 mt-0.5">{s.description}</p>
+                      {s.actionTaken && <p className="text-xs text-gray-600 mt-1">Action taken: {s.actionTaken}</p>}
+                      {s.type === 'incident' && (
+                        <p className="text-xs font-bold text-red-700 mt-1.5 bg-red-100 inline-block px-2 py-0.5 rounded">
+                          ACTION: File safety incident report
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))}
                 {report.delays?.map((d, i) => (
-                  <div key={`delay-${i}`} className="flex items-start gap-2">
-                    <span className="mt-0.5 inline-block w-2 h-2 rounded-full flex-shrink-0 bg-amber-500" />
+                  <div key={`delay-${i}`} className="flex items-start gap-3 bg-white/70 rounded-lg p-3">
+                    <span className="mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 flex-shrink-0">
+                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    </span>
                     <div>
-                      <span className="text-sm font-medium">DELAY:</span>{' '}
-                      <span className="text-sm">{d.reason}{d.duration && ` (${d.duration})`}</span>
-                      {d.impact && <p className="text-xs text-gray-600 mt-0.5">Impact: {d.impact}</p>}
+                      <span className="text-sm font-bold text-amber-800">DELAY</span>
+                      <p className="text-sm text-gray-900 mt-0.5">{d.reason}{d.duration && `, delayed ${d.duration}`}</p>
+                      {d.impact && <p className="text-xs text-gray-600 mt-1">Impact: {d.impact}</p>}
                     </div>
                   </div>
                 ))}
+                {report.deliveries?.filter(d => d.notes).map((d, i) => (
+                  <div key={`delivery-${i}`} className="flex items-start gap-3 bg-white/70 rounded-lg p-3">
+                    <span className="mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 flex-shrink-0">
+                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    </span>
+                    <div>
+                      <span className="text-sm font-bold text-amber-800">DELIVERY ISSUE</span>
+                      <p className="text-sm text-gray-900 mt-0.5">{d.vendor}: {d.notes}</p>
+                    </div>
+                  </div>
+                ))}
+                {report.shortages && (
+                  <div className="flex items-start gap-3 bg-white/70 rounded-lg p-3">
+                    <span className="mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 flex-shrink-0">
+                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    </span>
+                    <div>
+                      <span className="text-sm font-bold text-amber-800">SHORTAGE / MISSING</span>
+                      <p className="text-sm text-gray-900 mt-0.5">{report.shortages}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
