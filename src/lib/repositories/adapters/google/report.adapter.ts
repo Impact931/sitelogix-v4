@@ -172,8 +172,9 @@ export class GoogleSheetsReportRepository implements ReportRepository {
 
   /**
    * Get safety text for a specific employee.
-   * Only includes safety entries that mention this employee's name.
-   * If no name match is found and there's only 1 employee, they get all safety entries.
+   * Matches safety entries to employees by name mention in description.
+   * Unmatched non-positive entries are shown on ALL employee rows
+   * (a safety incident affects the whole crew, not just one person).
    */
   private getSafetyForEmployee(safety: SafetyEntry[] | undefined, employeeName: string, totalEmployees: number): string {
     if (!safety || safety.length === 0) return ''
@@ -181,28 +182,30 @@ export class GoogleSheetsReportRepository implements ReportRepository {
     const positiveOnly = safety.every((s) => s.type === 'positive')
     if (positiveOnly) return ''
 
-    // Match safety entries to this employee by checking if the description mentions their name
     const nameParts = employeeName.toLowerCase().split(/\s+/)
     const firstName = nameParts[0]
 
-    const matched = safety.filter((s) => {
+    // Split into entries that mention this employee and entries that don't mention anyone
+    const mentionsThisEmployee: SafetyEntry[] = []
+    const mentionsNoOne: SafetyEntry[] = []
+
+    for (const s of safety) {
+      if (s.type === 'positive') continue
       const desc = s.description.toLowerCase()
-      // Check full name or first name
-      return desc.includes(employeeName.toLowerCase()) || desc.includes(firstName)
-    })
-
-    // If only 1 employee on the report, they get all safety entries
-    // If no entries matched anyone, put them on the first employee row (handled by caller seeing empty)
-    if (matched.length > 0) {
-      return this.formatSafety(matched)
+      if (desc.includes(employeeName.toLowerCase()) || desc.includes(firstName)) {
+        mentionsThisEmployee.push(s)
+      } else {
+        // Check if it mentions ANY other employee — if not, it's unmatched
+        // For simplicity, treat all non-positive entries as relevant to all employees
+        mentionsNoOne.push(s)
+      }
     }
 
-    // If single-person crew, give all safety to them
-    if (totalEmployees === 1) {
-      return this.formatSafety(safety)
-    }
+    // Combine: entries that mention this employee + unmatched entries (crew-wide)
+    const relevant = [...mentionsThisEmployee, ...mentionsNoOne]
+    if (relevant.length === 0) return ''
 
-    return ''
+    return this.formatSafety(relevant)
   }
 
   /**

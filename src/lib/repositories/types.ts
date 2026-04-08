@@ -14,6 +14,7 @@ export interface Employee {
   id: string
   name: string
   active: boolean
+  goByName?: string  // Nickname / "Go By" name from roster (e.g., "Jason" for "Jayson Rivas")
   createdAt?: Date
   updatedAt?: Date
 }

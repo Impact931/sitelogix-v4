@@ -22,16 +22,19 @@ export class GoogleSheetsEmployeeRepository implements EmployeeRepository {
   async getAll(): Promise<Employee[]> {
     const response = await this.sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.tabName}'!A2:B`, // Skip header row
+      range: `'${this.tabName}'!A2:D`, // A: ID, B: Full Name, C: Go By Name, D: Position
     })
 
     const rows = response.data.values || []
 
-    return rows.map((row, index) => ({
-      id: `emp-${index + 1}`, // Generate ID based on row number
-      name: row[0] || '',
-      active: row[1]?.toLowerCase() !== 'false' && row[1]?.toLowerCase() !== 'inactive',
-    }))
+    return rows
+      .filter((row) => row[0] && row[1]) // Must have ID and name
+      .map((row) => ({
+        id: row[0] || '',              // Column A: Employee ID
+        name: row[1]?.trim() || '',    // Column B: Full Name
+        active: true,                   // All listed employees are active
+        goByName: row[2]?.trim() || undefined, // Column C: Go By Name (nickname)
+      }))
   }
 
   async findByName(name: string): Promise<Employee | null> {
@@ -44,19 +47,43 @@ export class GoogleSheetsEmployeeRepository implements EmployeeRepository {
   }
 
   async fuzzyMatch(name: string, threshold = 0.6): Promise<Employee | null> {
-    // First try exact match
+    // First try exact match on full name
     const exact = await this.findByName(name)
     if (exact) return exact
 
     const employees = await this.getAllActive()
+    const spoken = name.toLowerCase().trim()
 
-    // Try Fuse.js fuzzy matching
+    // Check "Go By Name" (nickname) — exact match
+    // This handles "Jason" matching roster entry with goByName "Jason" → "Jayson Rivas"
+    const goByMatch = employees.find(
+      (e) => e.goByName && e.goByName.toLowerCase().trim() === spoken
+    )
+    if (goByMatch) return goByMatch
+
+    // Fuzzy match on goByName (1-2 letters off)
+    const spokenFirst = spoken.split(/\s+/)[0]
+    if (!spoken.includes(' ')) {
+      let bestGoByMatch: Employee | null = null
+      let bestGoByDist = Infinity
+      for (const emp of employees) {
+        if (!emp.goByName) continue
+        const goBy = emp.goByName.toLowerCase().trim()
+        const dist = levenshteinDistance(spokenFirst, goBy)
+        if (dist <= 2 && dist < bestGoByDist) {
+          bestGoByDist = dist
+          bestGoByMatch = emp
+        }
+      }
+      if (bestGoByMatch) return bestGoByMatch
+    }
+
+    // Try Fuse.js fuzzy matching on full name
     const result = findBestMatch(name, employees, threshold)
     if (result) return result.employee
 
-    // First-name-only fallback: "Jason" → "Jayson Rivas" (handles spelling variations)
-    const spokenFirst = name.toLowerCase().trim().split(/\s+/)[0]
-    if (!name.includes(' ')) {
+    // First-name-only fallback on full name
+    if (!spoken.includes(' ')) {
       const firstNameMatches = employees.filter(
         (e) => e.name.toLowerCase().split(/\s+/)[0] === spokenFirst
       )

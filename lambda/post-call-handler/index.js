@@ -628,16 +628,20 @@ async function writeToDynamoDB(reportId, conversationId, transcript, transcriptT
 }
 
 // Load employee roster from Google Sheets for name matching
+// Returns array of { fullName, goByName } for matching
 async function loadEmployeeRoster(auth) {
   const sheets = google.sheets({ version: 'v4', auth });
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: GOOGLE_SHEETS_ID,
-    range: "'Employee Roster'!A2:B",
+    range: "'Employee Roster'!A2:C", // A: ID, B: Full Name, C: Go By Name
   });
   const rows = response.data.values || [];
   return rows
-    .filter(row => row[0] && (!row[1] || row[1].toLowerCase() !== 'inactive'))
-    .map(row => row[0].trim());
+    .filter(row => row[0] && row[1])
+    .map(row => ({
+      fullName: row[1].trim(),
+      goByName: row[2]?.trim() || null,
+    }));
 }
 
 // Load job sites from Google Sheets for fuzzy matching
@@ -708,60 +712,78 @@ function levenshtein(a, b) {
 }
 
 // Match a spoken name to the closest employee roster name
-// Handles: first-name-only ("Jason" → "Jayson Rivas"), nicknames, typos, spelling variations
+// Roster entries have { fullName, goByName }
+// Handles: nicknames ("Jason" → goByName "Jason" → "Jayson Rivas"), spelling variations, first-name-only
 function matchEmployeeName(spokenName, roster) {
   if (!roster || roster.length === 0) return spokenName;
 
   const spoken = spokenName.toLowerCase().trim();
   const spokenFirst = spoken.split(' ')[0];
 
-  // 1. Exact match (full name)
-  const exact = roster.find(r => r.toLowerCase() === spoken);
-  if (exact) return exact;
+  // 1. Exact match on full name
+  const exact = roster.find(r => r.fullName.toLowerCase() === spoken);
+  if (exact) return exact.fullName;
 
-  // 2. Exact first-name match (e.g., "Jayson" matches "Jayson Rivas")
+  // 2. Exact match on "Go By Name" (nickname)
+  const goByMatch = roster.find(r => r.goByName && r.goByName.toLowerCase() === spoken);
+  if (goByMatch) return goByMatch.fullName;
+
+  // 3. Fuzzy match on goByName (1-2 letters off)
+  if (!spoken.includes(' ')) {
+    let bestGoBy = null;
+    let bestGoByDist = Infinity;
+    for (const r of roster) {
+      if (!r.goByName) continue;
+      const dist = levenshtein(spokenFirst, r.goByName.toLowerCase());
+      if (dist <= 2 && dist < bestGoByDist) {
+        bestGoByDist = dist;
+        bestGoBy = r;
+      }
+    }
+    if (bestGoBy) return bestGoBy.fullName;
+  }
+
+  // 4. Exact first-name match on full name
   const firstNameMatches = roster.filter(r =>
-    r.toLowerCase().split(' ')[0] === spokenFirst
+    r.fullName.toLowerCase().split(' ')[0] === spokenFirst
   );
-  if (firstNameMatches.length === 1) return firstNameMatches[0];
+  if (firstNameMatches.length === 1) return firstNameMatches[0].fullName;
 
-  // 3. Fuzzy first-name match (e.g., "Jason" → "Jayson Rivas" — 1 letter off)
-  // Only applies when the caller gave a first name only (no space in spoken name)
+  // 5. Fuzzy first-name match (1-2 letters off)
   if (!spoken.includes(' ')) {
     let bestFirstMatch = null;
     let bestFirstDist = Infinity;
-    for (const name of roster) {
-      const rosterFirst = name.toLowerCase().split(' ')[0];
+    for (const r of roster) {
+      const rosterFirst = r.fullName.toLowerCase().split(' ')[0];
       const dist = levenshtein(spokenFirst, rosterFirst);
       if (dist <= 2 && dist < bestFirstDist) {
         bestFirstDist = dist;
-        bestFirstMatch = name;
+        bestFirstMatch = r;
       }
     }
-    if (bestFirstMatch) return bestFirstMatch;
+    if (bestFirstMatch) return bestFirstMatch.fullName;
   }
 
-  // 4. Partial/contains match (spoken name is part of roster name or vice versa)
+  // 6. Partial/contains match
   const containsMatches = roster.filter(r =>
-    r.toLowerCase().includes(spoken) || spoken.includes(r.toLowerCase())
+    r.fullName.toLowerCase().includes(spoken) || spoken.includes(r.fullName.toLowerCase())
   );
-  if (containsMatches.length === 1) return containsMatches[0];
+  if (containsMatches.length === 1) return containsMatches[0].fullName;
 
-  // 5. Full Levenshtein fuzzy match
+  // 7. Full Levenshtein fuzzy match
   let bestMatch = null;
   let bestScore = Infinity;
-  for (const name of roster) {
-    const dist = levenshtein(spoken, name.toLowerCase());
-    const maxLen = Math.max(spoken.length, name.length);
+  for (const r of roster) {
+    const dist = levenshtein(spoken, r.fullName.toLowerCase());
+    const maxLen = Math.max(spoken.length, r.fullName.length);
     const similarity = 1 - (dist / maxLen);
     if (similarity > 0.5 && dist < bestScore) {
       bestScore = dist;
-      bestMatch = name;
+      bestMatch = r;
     }
   }
-  if (bestMatch) return bestMatch;
+  if (bestMatch) return bestMatch.fullName;
 
-  // No match found — return original
   return spokenName;
 }
 
