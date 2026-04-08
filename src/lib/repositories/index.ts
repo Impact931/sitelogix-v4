@@ -12,6 +12,8 @@
 
 import type {
   EmployeeRepository,
+  JobSiteRepository,
+  VendorRepository,
   ReportRepository,
   FileRepository,
   FileAdapterType,
@@ -19,6 +21,8 @@ import type {
 
 // Lazy-loaded adapters
 let googleEmployeeRepo: EmployeeRepository | null = null
+let googleJobSiteRepo: JobSiteRepository | null = null
+let googleVendorRepo: VendorRepository | null = null
 let googleReportRepo: ReportRepository | null = null
 let googleFileRepo: FileRepository | null = null
 
@@ -31,6 +35,28 @@ export function getEmployeeRepository(): EmployeeRepository {
     googleEmployeeRepo = new GoogleSheetsEmployeeRepository()
   }
   return googleEmployeeRepo!
+}
+
+/**
+ * Get Job Site Repository (Google Sheets)
+ */
+export function getJobSiteRepository(): JobSiteRepository {
+  if (!googleJobSiteRepo) {
+    const { GoogleSheetsJobSiteRepository } = require('./adapters/google')
+    googleJobSiteRepo = new GoogleSheetsJobSiteRepository()
+  }
+  return googleJobSiteRepo!
+}
+
+/**
+ * Get Vendor Repository (Google Sheets)
+ */
+export function getVendorRepository(): VendorRepository {
+  if (!googleVendorRepo) {
+    const { GoogleSheetsVendorRepository } = require('./adapters/google')
+    googleVendorRepo = new GoogleSheetsVendorRepository()
+  }
+  return googleVendorRepo!
 }
 
 /**
@@ -76,6 +102,8 @@ export function getFileRepository(): FileRepository {
 export function getRepositories() {
   return {
     employees: getEmployeeRepository(),
+    jobSites: getJobSiteRepository(),
+    vendors: getVendorRepository(),
     reports: getReportRepository(),
     files: getFileRepository(),
   }

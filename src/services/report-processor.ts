@@ -14,6 +14,8 @@
 import {
   getReportRepository,
   getEmployeeRepository,
+  getJobSiteRepository,
+  getVendorRepository,
   type DailyReport,
   type EmployeeHours,
   type Delivery,
@@ -48,6 +50,8 @@ export async function processReport(data: RoxyWebhookData): Promise<ProcessingRe
   try {
     const reportRepo = getReportRepository()
     const employeeRepo = getEmployeeRepository()
+    const jobSiteRepo = getJobSiteRepository()
+    const vendorRepo = getVendorRepository()
 
     // Load employee roster for name matching
     let rosterEmployees: Awaited<ReturnType<typeof employeeRepo.getAllActive>> = []
@@ -59,11 +63,33 @@ export async function processReport(data: RoxyWebhookData): Promise<ProcessingRe
       console.warn('[ReportProcessor] Failed to load roster:', rosterError)
     }
 
+    // Match job site name against Job Sites tab
+    let normalizedJobSite: string | undefined
+    if (data.job_site) {
+      try {
+        const siteMatch = await jobSiteRepo.fuzzyMatch(data.job_site, 0.5)
+        if (siteMatch) {
+          normalizedJobSite = siteMatch.name
+          console.log(`[ReportProcessor] Job site matched: "${data.job_site}" → "${siteMatch.name}"`)
+        } else {
+          warnings.push(`No job site match for "${data.job_site}" — using as-is`)
+          normalizedJobSite = data.job_site
+        }
+      } catch (siteError) {
+        warnings.push('Could not load job sites for matching')
+        console.warn('[ReportProcessor] Failed to load job sites:', siteError)
+        normalizedJobSite = data.job_site
+      }
+    }
+
     // Process employees with name matching against roster
     const employeeHours: EmployeeHours[] = []
     for (const emp of data.employees) {
-      const regularHours = Number(emp.regular_hours) || 0
-      const overtimeHours = Number(emp.overtime_hours) || 0
+      const rawRegular = Number(emp.regular_hours) || 0
+      const rawOvertime = Number(emp.overtime_hours) || 0
+
+      // Apply lunch deduction and OT split
+      const { regularHours, overtimeHours } = applyLunchDeduction(rawRegular, rawOvertime)
       const totalHours = regularHours + overtimeHours
 
       let normalizedName = emp.name
@@ -95,14 +121,33 @@ export async function processReport(data: RoxyWebhookData): Promise<ProcessingRe
       })
     }
 
-    // Process other fields
-    const deliveries: Delivery[] | undefined = data.deliveries?.map((d) => ({
-      vendor: d.vendor,
-      normalizedVendor: d.vendor,
-      material: d.material,
-      quantity: d.quantity,
-      notes: d.notes,
-    }))
+    // Process deliveries with vendor name matching
+    let deliveries: Delivery[] | undefined
+    if (data.deliveries && data.deliveries.length > 0) {
+      deliveries = []
+      for (const d of data.deliveries) {
+        let normalizedVendor = d.vendor
+        try {
+          const vendorMatch = await vendorRepo.fuzzyMatch(d.vendor, 0.5)
+          if (vendorMatch) {
+            normalizedVendor = vendorMatch.name
+            console.log(`[ReportProcessor] Vendor matched: "${d.vendor}" → "${vendorMatch.name}"`)
+          } else {
+            warnings.push(`No vendor match for "${d.vendor}" — using as-is`)
+          }
+        } catch (vendorError) {
+          warnings.push('Could not load vendors for matching')
+          console.warn('[ReportProcessor] Failed to load vendors:', vendorError)
+        }
+        deliveries.push({
+          vendor: d.vendor,
+          normalizedVendor,
+          material: d.material,
+          quantity: d.quantity,
+          notes: d.notes,
+        })
+      }
+    }
 
     const equipment: Equipment[] | undefined = data.equipment?.map((e) => ({
       name: e.name,
@@ -140,6 +185,7 @@ export async function processReport(data: RoxyWebhookData): Promise<ProcessingRe
       submittedAt: new Date(data.timestamp || Date.now()),
       timezone: 'America/New_York',
       jobSite: data.job_site,
+      normalizedJobSite,
       employees: employeeHours,
       subcontractors,
       deliveries,
@@ -151,6 +197,7 @@ export async function processReport(data: RoxyWebhookData): Promise<ProcessingRe
       delays,
       workPerformed,
       notes: data.notes,
+      other: data.other,
       audioUrl: data.audioUrl,
       transcriptUrl: undefined,
     }
@@ -182,6 +229,51 @@ export async function processReport(data: RoxyWebhookData): Promise<ProcessingRe
       processedEmployees,
     }
   }
+}
+
+/**
+ * Apply lunch deduction and OT split to raw hours from Roxy.
+ *
+ * Rules:
+ * - If the foreman explicitly split regular/OT (overtime_hours > 0), pass through as-is.
+ * - If all hours are in regular_hours (overtime_hours = 0), treat as raw total:
+ *   1. Deduct 30 minutes for lunch
+ *   2. First 8 hours of raw time (7.5 net after lunch) = regular
+ *   3. Everything beyond 8 raw hours = overtime (no lunch deduction on OT)
+ *
+ * Examples:
+ * - "worked 8 hours" → 8 raw → 7.5 regular, 0 OT
+ * - "worked 10 hours" → 10 raw → 7.5 regular, 2 OT
+ * - "7am to 8pm" (13 hrs) → 13 raw → 7.5 regular, 5 OT
+ * - "8 regular, 2 overtime" (explicit) → pass through 8 regular, 2 OT
+ */
+function applyLunchDeduction(
+  rawRegular: number,
+  rawOvertime: number
+): { regularHours: number; overtimeHours: number } {
+  // If foreman explicitly split reg/OT, respect that — no adjustment
+  if (rawOvertime > 0) {
+    return { regularHours: rawRegular, overtimeHours: rawOvertime }
+  }
+
+  // All hours in regular_hours — treat as raw total and apply rules
+  const rawTotal = rawRegular
+  const LUNCH_DEDUCTION = 0.5
+  const RAW_REGULAR_CAP = 8 // 8 raw hours = 7.5 net after lunch
+
+  if (rawTotal <= 0) {
+    return { regularHours: 0, overtimeHours: 0 }
+  }
+
+  if (rawTotal <= RAW_REGULAR_CAP) {
+    // All regular time, deduct lunch
+    return { regularHours: rawTotal - LUNCH_DEDUCTION, overtimeHours: 0 }
+  }
+
+  // Over 8 raw hours: 7.5 regular + remainder as OT
+  const regularHours = RAW_REGULAR_CAP - LUNCH_DEDUCTION // 7.5
+  const overtimeHours = rawTotal - RAW_REGULAR_CAP
+  return { regularHours, overtimeHours }
 }
 
 /**

@@ -4,11 +4,11 @@
  * Implements ReportRepository interface using Google Sheets API.
  * Writes to "Main Report Log" and "Payroll Summary" tabs.
  *
- * Main Report Log Columns (17 columns A-Q):
+ * Main Report Log Columns (18 columns A-R):
  * A: Timestamp | B: Job Site | C: Employee Name | D: Regular Hours | E: OT Hours
  * F: Deliveries | G: Equipment | H: Safety | I: Weather | J: Shortages
  * K: Audio Link | L: Transcript Link | M: Delays | N: Notes
- * O: Subcontractors | P: Work Performed | Q: Report ID
+ * O: Subcontractors | P: Work Performed | Q: Report ID | R: Other
  */
 
 import type {
@@ -54,7 +54,7 @@ export class GoogleSheetsReportRepository implements ReportRepository {
       const empSafetyText = this.getSafetyForEmployee(report.safety, emp.normalizedName, report.employees.length)
       return [
         timestamp,                          // A: Timestamp
-        report.jobSite || '',               // B: Job Site
+        report.normalizedJobSite || report.jobSite || '', // B: Job Site
         emp.normalizedName,                 // C: Employee Name
         emp.regularHours,                   // D: Regular Hours
         emp.overtimeHours,                  // E: OT Hours
@@ -70,12 +70,13 @@ export class GoogleSheetsReportRepository implements ReportRepository {
         subcontractorsText,                 // O: Subcontractors
         workText,                           // P: Work Performed
         reportId,                           // Q: Report ID
+        report.other || '',                 // R: Other
       ]
     })
 
     await this.sheets.spreadsheets.values.append({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A:Q`,
+      range: `'${this.mainLogTab}'!A:R`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: mainLogRows,
@@ -85,7 +86,7 @@ export class GoogleSheetsReportRepository implements ReportRepository {
     // Write to Payroll Summary - one row per employee
     const payrollRows = report.employees.map((emp) => [
       date,
-      report.jobSite || '',
+      report.normalizedJobSite || report.jobSite || '',
       emp.normalizedName,
       emp.regularHours,
       emp.overtimeHours,
@@ -268,7 +269,7 @@ export class GoogleSheetsReportRepository implements ReportRepository {
   async getReportsByDateRange(start: Date, end: Date): Promise<DailyReport[]> {
     const response = await this.sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A2:Q`,
+      range: `'${this.mainLogTab}'!A2:R`,
     })
 
     const rows = response.data.values || []
@@ -334,7 +335,7 @@ export class GoogleSheetsReportRepository implements ReportRepository {
     // Find all rows with this report ID and update them
     const response = await this.sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A:Q`,
+      range: `'${this.mainLogTab}'!A:R`,
     })
 
     const rows = response.data.values || []
@@ -397,7 +398,7 @@ export class GoogleSheetsReportRepository implements ReportRepository {
   async findRecentReportWithoutFiles(): Promise<{ id: string; rowIndices: number[] } | null> {
     const response = await this.sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
-      range: `'${this.mainLogTab}'!A:Q`,
+      range: `'${this.mainLogTab}'!A:R`,
     })
 
     const rows = response.data.values || []

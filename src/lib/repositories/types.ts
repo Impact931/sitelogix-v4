@@ -18,6 +18,18 @@ export interface Employee {
   updatedAt?: Date
 }
 
+export interface JobSite {
+  id: string
+  name: string
+  active: boolean
+}
+
+export interface Vendor {
+  id: string
+  name: string
+  active: boolean
+}
+
 export interface EmployeeHours {
   employeeId?: string
   name: string              // Original name from voice input
@@ -73,6 +85,7 @@ export interface DailyReport {
   submittedAt: Date
   timezone: string
   jobSite?: string
+  normalizedJobSite?: string
 
   // People
   employees: EmployeeHours[]
@@ -94,6 +107,7 @@ export interface DailyReport {
   // Work Summary
   workPerformed?: WorkEntry[]
   notes?: string
+  other?: string
 
   // File references
   audioUrl?: string
@@ -143,6 +157,24 @@ export interface EmployeeRepository {
    * Update an employee
    */
   update(id: string, data: Partial<Employee>): Promise<Employee>
+}
+
+/**
+ * Job Site Repository Interface
+ * Handles job site reference data for name matching
+ */
+export interface JobSiteRepository {
+  getAllActive(): Promise<JobSite[]>
+  fuzzyMatch(name: string, threshold?: number): Promise<JobSite | null>
+}
+
+/**
+ * Vendor Repository Interface
+ * Handles vendor reference data for name matching
+ */
+export interface VendorRepository {
+  getAllActive(): Promise<Vendor[]>
+  fuzzyMatch(name: string, threshold?: number): Promise<Vendor | null>
 }
 
 /**
@@ -285,6 +317,7 @@ export interface RoxyWebhookData {
   }>
   shortages?: string
   notes?: string
+  other?: string
   // Metadata added by our system
   timestamp?: string
   audioUrl?: string
