@@ -113,9 +113,13 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   const totalOT = report.employees.reduce((sum, e) => sum + e.overtimeHours, 0)
   const hasSafetyIssues = (report.safety || []).some((s) => s.type !== 'positive')
   const hasDelays = (report.delays || []).length > 0
-  const hasShortages = !!report.shortages
-  const hasDeliveryIssues = (report.deliveries || []).some((d) => d.notes)
-  const hasAttentionItems = hasSafetyIssues || hasDelays || hasShortages || hasDeliveryIssues
+  const shortageText = report.shortages && report.shortages.toLowerCase() !== 'none' ? report.shortages : null
+  const deliveryIssues = (report.deliveries || []).filter((d) => {
+    if (!d.notes) return false
+    const n = d.notes.toLowerCase()
+    return !n.includes('everything was there') && !n.includes('all good') && !n.includes('no issues') && n.trim() !== ''
+  })
+  const hasAttentionItems = hasSafetyIssues || hasDelays || !!shortageText || deliveryIssues.length > 0
 
   const submittedDate = new Date(report.submittedAt).toLocaleDateString('en-US', {
     timeZone: report.timezone || 'America/New_York',
@@ -268,7 +272,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                   </div>
                 ))}
-                {report.deliveries?.filter(d => d.notes).map((d, i) => (
+                {deliveryIssues.map((d, i) => (
                   <div key={`delivery-${i}`} className="flex items-start gap-3 bg-white/70 rounded-lg p-3">
                     <span className="mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 flex-shrink-0">
                       <span className="w-2 h-2 rounded-full bg-amber-500" />
@@ -279,14 +283,14 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                   </div>
                 ))}
-                {report.shortages && (
+                {shortageText && (
                   <div className="flex items-start gap-3 bg-white/70 rounded-lg p-3">
                     <span className="mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 flex-shrink-0">
                       <span className="w-2 h-2 rounded-full bg-amber-500" />
                     </span>
                     <div>
                       <span className="text-sm font-bold text-amber-800">SHORTAGE / MISSING</span>
-                      <p className="text-sm text-gray-900 mt-0.5">{report.shortages}</p>
+                      <p className="text-sm text-gray-900 mt-0.5">{shortageText}</p>
                     </div>
                   </div>
                 )}
@@ -417,13 +421,6 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                   ))}
                 </div>
-              </ReportSection>
-            )}
-
-            {/* Constraints / Shortages */}
-            {report.shortages && (
-              <ReportSection title="Shortages / Constraints" icon="X" accent="amber">
-                <p className="text-sm text-gray-800">{report.shortages}</p>
               </ReportSection>
             )}
 

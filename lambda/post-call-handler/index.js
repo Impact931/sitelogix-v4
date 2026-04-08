@@ -708,29 +708,46 @@ function levenshtein(a, b) {
 }
 
 // Match a spoken name to the closest employee roster name
-// Handles: first-name-only ("Jayson" → "Jayson Rivas"), nicknames, typos
+// Handles: first-name-only ("Jason" → "Jayson Rivas"), nicknames, typos, spelling variations
 function matchEmployeeName(spokenName, roster) {
   if (!roster || roster.length === 0) return spokenName;
 
   const spoken = spokenName.toLowerCase().trim();
+  const spokenFirst = spoken.split(' ')[0];
 
-  // 1. Exact match
+  // 1. Exact match (full name)
   const exact = roster.find(r => r.toLowerCase() === spoken);
   if (exact) return exact;
 
-  // 2. First-name match (e.g., "Jayson" matches "Jayson Rivas")
+  // 2. Exact first-name match (e.g., "Jayson" matches "Jayson Rivas")
   const firstNameMatches = roster.filter(r =>
-    r.toLowerCase().split(' ')[0] === spoken.split(' ')[0]
+    r.toLowerCase().split(' ')[0] === spokenFirst
   );
   if (firstNameMatches.length === 1) return firstNameMatches[0];
 
-  // 3. Partial/contains match (spoken name is part of roster name or vice versa)
+  // 3. Fuzzy first-name match (e.g., "Jason" → "Jayson Rivas" — 1 letter off)
+  // Only applies when the caller gave a first name only (no space in spoken name)
+  if (!spoken.includes(' ')) {
+    let bestFirstMatch = null;
+    let bestFirstDist = Infinity;
+    for (const name of roster) {
+      const rosterFirst = name.toLowerCase().split(' ')[0];
+      const dist = levenshtein(spokenFirst, rosterFirst);
+      if (dist <= 2 && dist < bestFirstDist) {
+        bestFirstDist = dist;
+        bestFirstMatch = name;
+      }
+    }
+    if (bestFirstMatch) return bestFirstMatch;
+  }
+
+  // 4. Partial/contains match (spoken name is part of roster name or vice versa)
   const containsMatches = roster.filter(r =>
     r.toLowerCase().includes(spoken) || spoken.includes(r.toLowerCase())
   );
   if (containsMatches.length === 1) return containsMatches[0];
 
-  // 4. Levenshtein fuzzy match
+  // 5. Full Levenshtein fuzzy match
   let bestMatch = null;
   let bestScore = Infinity;
   for (const name of roster) {

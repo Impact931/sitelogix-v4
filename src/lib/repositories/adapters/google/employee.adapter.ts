@@ -6,7 +6,7 @@
  */
 
 import type { Employee, EmployeeRepository } from '../../types'
-import { findBestMatch } from '../../utils/fuzzy-match'
+import { findBestMatch, levenshteinDistance } from '../../utils/fuzzy-match'
 import { getSheetsClient, GOOGLE_CONFIG } from './auth'
 
 export class GoogleSheetsEmployeeRepository implements EmployeeRepository {
@@ -48,11 +48,35 @@ export class GoogleSheetsEmployeeRepository implements EmployeeRepository {
     const exact = await this.findByName(name)
     if (exact) return exact
 
-    // Fall back to fuzzy matching
     const employees = await this.getAllActive()
-    const result = findBestMatch(name, employees, threshold)
 
-    return result?.employee ?? null
+    // Try Fuse.js fuzzy matching
+    const result = findBestMatch(name, employees, threshold)
+    if (result) return result.employee
+
+    // First-name-only fallback: "Jason" → "Jayson Rivas" (handles spelling variations)
+    const spokenFirst = name.toLowerCase().trim().split(/\s+/)[0]
+    if (!name.includes(' ')) {
+      const firstNameMatches = employees.filter(
+        (e) => e.name.toLowerCase().split(/\s+/)[0] === spokenFirst
+      )
+      if (firstNameMatches.length === 1) return firstNameMatches[0]
+
+      // Fuzzy first-name match (1-2 letters off)
+      let bestMatch: Employee | null = null
+      let bestDist = Infinity
+      for (const emp of employees) {
+        const rosterFirst = emp.name.toLowerCase().split(/\s+/)[0]
+        const dist = levenshteinDistance(spokenFirst, rosterFirst)
+        if (dist <= 2 && dist < bestDist) {
+          bestDist = dist
+          bestMatch = emp
+        }
+      }
+      if (bestMatch) return bestMatch
+    }
+
+    return null
   }
 
   async create(data: Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>): Promise<Employee> {
