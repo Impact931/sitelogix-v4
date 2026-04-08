@@ -117,6 +117,14 @@ export default function Home() {
     return () => { clearInterval(interval); clearTimeout(timeout) }
   }, [state, conversationId, report, fetchReport])
 
+  // Auto-navigate to report view when report is ready
+  useEffect(() => {
+    if (state === 'complete' && report && showView === 'none') {
+      const timer = setTimeout(() => setShowView('report'), 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [state, report, showView])
+
   return (
     <div className="flex min-h-screen flex-col bg-neutral-950 safe-area-inset">
       {/* Phone-frame constraint for desktop */}
@@ -150,8 +158,8 @@ export default function Home() {
               )}
             </div>
 
-            {/* Bottom CTA */}
-            <div className="px-5 pb-8">
+            {/* Bottom CTAs */}
+            <div className="px-5 pb-8 space-y-3">
               <button
                 onClick={handleStartReport}
                 className="w-full h-[58px] rounded-2xl bg-yellow-400 text-black font-extrabold text-[16px] tracking-wide shadow-xl shadow-yellow-400/25 transition-all active:scale-[0.97] hover:bg-yellow-300 flex items-center justify-center gap-3"
@@ -161,7 +169,16 @@ export default function Home() {
                 </svg>
                 Call Roxy
               </button>
-              <footer className="mt-5 text-center">
+              <a
+                href="/admin"
+                className="w-full h-[48px] rounded-xl bg-neutral-900 border border-neutral-800 text-white font-semibold text-[14px] transition-all active:scale-[0.98] hover:bg-neutral-800 flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                View Reports
+              </a>
+              <footer className="mt-2 text-center">
                 <span className="text-[10px] text-neutral-700 tracking-widest uppercase">Parkway Construction Services</span>
               </footer>
             </div>
