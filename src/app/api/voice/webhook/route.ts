@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
       work_performed: payload.work_performed,
       shortages: payload.shortages,
       notes: payload.notes,
+      other: payload.other,
       timestamp: new Date().toISOString(),
     }
 
