@@ -179,7 +179,7 @@ async function updateReportWithFiles(auth, audioUrl, transcriptUrl) {
 
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: GOOGLE_SHEETS_ID,
-    range: "'Main Report Log'!A:Q",
+    range: "'Main Report Log'!A:S",
   });
 
   const rows = response.data.values || [];
@@ -193,7 +193,7 @@ async function updateReportWithFiles(auth, audioUrl, transcriptUrl) {
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
-    const reportId = row[16]; // Column Q - Report ID
+    const reportId = row[12]; // Column Q - Report ID
     const hasAudio = row[10]; // Column K
     const hasTranscript = row[11]; // Column L
     const timestamp = new Date(row[0]);
@@ -268,7 +268,7 @@ async function getReportsWithoutFiles(auth) {
 
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: GOOGLE_SHEETS_ID,
-    range: "'Main Report Log'!A:Q",
+    range: "'Main Report Log'!A:S",
   });
 
   const rows = response.data.values || [];
@@ -278,7 +278,7 @@ async function getReportsWithoutFiles(auth) {
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
-    const reportId = row[16];
+    const reportId = row[12];
     const hasAudio = row[10];
     const hasTranscript = row[11];
 
@@ -850,7 +850,7 @@ async function getRecentReportData(auth, reportId) {
 
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: GOOGLE_SHEETS_ID,
-    range: "'Main Report Log'!A:Q",
+    range: "'Main Report Log'!A:S",
   });
 
   const rows = response.data.values || [];
@@ -859,7 +859,7 @@ async function getRecentReportData(auth, reportId) {
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
-    if (row[16] === reportId) {
+    if (row[12] === reportId) {
       jobSite = row[1] || jobSite;
       const originalName = row[2] || 'Unknown';
       const normalizedName = matchEmployeeName(originalName, roster);
@@ -876,16 +876,20 @@ async function getRecentReportData(auth, reportId) {
     }
   }
 
-  const matchedRow = rows.find(r => r[16] === reportId);
+  const matchedRow = rows.find(r => r[12] === reportId);
   return {
     jobSite,
     employees,
-    deliveriesText: matchedRow?.[5] || undefined,
-    equipmentText: matchedRow?.[6] || undefined,
-    safetyText: matchedRow?.[7] || undefined,
-    weatherConditions: matchedRow?.[8] || undefined,
-    shortages: matchedRow?.[9] || undefined,
-    notes: matchedRow?.[13] || undefined,
+    workPerformedText: matchedRow?.[5] || undefined,
+    deliveriesText: matchedRow?.[6] || undefined,
+    equipmentText: matchedRow?.[7] || undefined,
+    safetyText: matchedRow?.[8] || undefined,
+    weatherConditions: matchedRow?.[9] || undefined,
+    delaysText: matchedRow?.[13] || undefined,
+    shortages: matchedRow?.[14] || undefined,
+    subcontractorsText: matchedRow?.[15] || undefined,
+    notes: matchedRow?.[16] || undefined,
+    other: matchedRow?.[17] || undefined,
   };
 }
 
