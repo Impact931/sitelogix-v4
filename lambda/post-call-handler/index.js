@@ -534,7 +534,7 @@ async function writeToDynamoDB(reportId, conversationId, transcript, transcriptT
   if (existingItem) {
     // Update existing report with transcript + files + structured data
     const rd = transcriptReportData || {};
-    const employees = reportData?.employees || existingItem.employees || [];
+    const employees = (reportData?.employees?.length > 0) ? reportData.employees : (rd.employees?.length > 0) ? rd.employees : (existingItem.employees || []);
     const summary = generateReportSummary(rd, employees, callDurationSecs);
 
     const updates = ['#updatedAt = :now'];
@@ -583,7 +583,7 @@ async function writeToDynamoDB(reportId, conversationId, transcript, transcriptT
   } else {
     // Merge data: transcript tool call data is richest, fall back to Sheets data
     const rd = transcriptReportData || {};
-    const employees = reportData?.employees || [];
+    const employees = (reportData?.employees?.length > 0) ? reportData.employees : (rd.employees || []);
     const summary = generateReportSummary(rd, employees, callDurationSecs);
 
     const item = {
@@ -638,6 +638,58 @@ async function loadEmployeeRoster(auth) {
   return rows
     .filter(row => row[0] && (!row[1] || row[1].toLowerCase() !== 'inactive'))
     .map(row => row[0].trim());
+}
+
+// Load job sites from Google Sheets for fuzzy matching
+async function loadJobSites(auth) {
+  const sheets = google.sheets({ version: 'v4', auth });
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: GOOGLE_SHEETS_ID,
+    range: "'Project Sites'!B2:B",
+  });
+  const rows = response.data.values || [];
+  return rows.map(row => row[0]?.trim()).filter(Boolean);
+}
+
+// Load vendors from Google Sheets for fuzzy matching
+async function loadVendors(auth) {
+  const sheets = google.sheets({ version: 'v4', auth });
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: GOOGLE_SHEETS_ID,
+    range: "'Suppliers'!B2:B",
+  });
+  const rows = response.data.values || [];
+  return rows.map(row => row[0]?.trim()).filter(Boolean);
+}
+
+// Generic fuzzy match against a list of names
+function matchName(spokenName, nameList) {
+  if (!nameList || nameList.length === 0) return spokenName;
+  const spoken = spokenName.toLowerCase().trim();
+
+  // Exact match
+  const exact = nameList.find(n => n.toLowerCase() === spoken);
+  if (exact) return exact;
+
+  // Contains match
+  const containsMatches = nameList.filter(n =>
+    n.toLowerCase().includes(spoken) || spoken.includes(n.toLowerCase())
+  );
+  if (containsMatches.length === 1) return containsMatches[0];
+
+  // Levenshtein fuzzy match
+  let bestMatch = null;
+  let bestScore = Infinity;
+  for (const name of nameList) {
+    const dist = levenshtein(spoken, name.toLowerCase());
+    const maxLen = Math.max(spoken.length, name.length);
+    const similarity = 1 - (dist / maxLen);
+    if (similarity > 0.5 && dist < bestScore) {
+      bestScore = dist;
+      bestMatch = name;
+    }
+  }
+  return bestMatch || spokenName;
 }
 
 // Levenshtein distance for fuzzy name matching
@@ -696,6 +748,19 @@ function matchEmployeeName(spokenName, roster) {
   return spokenName;
 }
 
+// Apply lunch deduction and OT split to raw hours
+// If foreman explicitly split reg/OT (overtime > 0), pass through as-is.
+// Otherwise: deduct 30min lunch, cap regular at 7.5, rest is OT.
+function applyLunchDeduction(rawRegular, rawOvertime) {
+  if (rawOvertime > 0) {
+    return { regularHours: rawRegular, overtimeHours: rawOvertime };
+  }
+  const rawTotal = rawRegular;
+  if (rawTotal <= 0) return { regularHours: 0, overtimeHours: 0 };
+  if (rawTotal <= 8) return { regularHours: rawTotal - 0.5, overtimeHours: 0 };
+  return { regularHours: 7.5, overtimeHours: rawTotal - 8 };
+}
+
 // Extract structured report data from the transcript's submit_daily_report tool call
 // This is the richest data source — contains all fields Roxy collected during the call
 function extractReportDataFromTranscript(transcript) {
@@ -723,9 +788,24 @@ function extractReportDataFromTranscript(transcript) {
 
       console.log('[ExtractReport] Found submit_daily_report data:', JSON.stringify(params).substring(0, 300));
 
+      // Process employees with lunch deduction
+      const employees = (params.employees || []).map(emp => {
+        const rawRegular = Number(emp.regular_hours) || 0;
+        const rawOvertime = Number(emp.overtime_hours) || 0;
+        const { regularHours, overtimeHours } = applyLunchDeduction(rawRegular, rawOvertime);
+        return {
+          name: emp.name,
+          normalizedName: emp.name,
+          regularHours,
+          overtimeHours,
+          totalHours: regularHours + overtimeHours,
+        };
+      });
+
       // Convert snake_case from ElevenLabs to camelCase for DynamoDB
       return {
         jobSite: params.job_site,
+        employees,
         workPerformed: (params.work_performed || []).map(w => ({
           description: w.description,
           area: w.area || undefined,
@@ -989,6 +1069,52 @@ exports.handler = async (event) => {
 
       // Extract structured data from transcript tool call
       const transcriptReportData = extractReportDataFromTranscript(transcript);
+
+      // Apply employee name matching to transcript-extracted employees
+      if (transcriptReportData?.employees?.length > 0) {
+        try {
+          const roster = await loadEmployeeRoster(auth);
+          for (const emp of transcriptReportData.employees) {
+            const matched = matchEmployeeName(emp.name, roster);
+            if (matched !== emp.name) {
+              console.log(`[NameMatch] Transcript: "${emp.name}" → "${matched}"`);
+            }
+            emp.normalizedName = matched;
+          }
+        } catch (e) {
+          console.warn('[NameMatch] Could not match transcript employees:', e.message);
+        }
+      }
+
+      // Apply job site fuzzy matching to transcript data
+      if (transcriptReportData?.jobSite) {
+        try {
+          const jobSites = await loadJobSites(auth);
+          const matched = matchName(transcriptReportData.jobSite, jobSites);
+          if (matched !== transcriptReportData.jobSite) {
+            console.log(`[SiteMatch] "${transcriptReportData.jobSite}" → "${matched}"`);
+            transcriptReportData.jobSite = matched;
+          }
+        } catch (e) {
+          console.warn('[SiteMatch] Could not match job site:', e.message);
+        }
+      }
+
+      // Apply vendor fuzzy matching to transcript deliveries
+      if (transcriptReportData?.deliveries?.length > 0) {
+        try {
+          const vendors = await loadVendors(auth);
+          for (const d of transcriptReportData.deliveries) {
+            const matched = matchName(d.vendor, vendors);
+            if (matched !== d.vendor) {
+              console.log(`[VendorMatch] "${d.vendor}" → "${matched}"`);
+              d.vendor = matched;
+            }
+          }
+        } catch (e) {
+          console.warn('[VendorMatch] Could not match vendors:', e.message);
+        }
+      }
 
       await writeToDynamoDB(
         reportId || `RPT-${Date.now()}`,
