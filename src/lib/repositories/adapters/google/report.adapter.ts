@@ -61,20 +61,20 @@ export class GoogleSheetsReportRepository implements ReportRepository {
         emp.normalizedName,                                 // C: Employee Name
         emp.regularHours,                                   // D: Regular Hours
         emp.overtimeHours,                                  // E: OT Hours
-        workText,                                           // F: Work Performed
-        deliveriesText,                                     // G: Deliveries
-        equipmentText,                                      // H: Equipment
-        empSafetyText,                                      // I: Safety
-        weatherText,                                        // J: Weather
+        workText || 'None reported',                        // F: Work Performed
+        deliveriesText || 'None',                           // G: Deliveries
+        equipmentText || 'None',                            // H: Equipment
+        empSafetyText || 'No issues',                       // I: Safety
+        weatherText || 'Not reported',                      // J: Weather
         report.audioUrl || '',                              // K: Audio Recording
         report.transcriptUrl || '',                         // L: Transcripts Link
         reportId,                                           // M: Report ID
-        delaysText,                                         // N: Delays (new)
-        report.shortages || '',                             // O: Shortages (new)
-        subcontractorsText,                                 // P: Subcontractors (new)
-        report.notes || '',                                 // Q: Notes (new)
-        report.other || '',                                 // R: Other (new)
-        emp.totalHours,                                     // S: Total Hours (new)
+        delaysText || 'None',                               // N: Delays
+        report.shortages || 'None',                         // O: Shortages
+        subcontractorsText || 'None',                       // P: Subcontractors
+        report.notes || '',                                 // Q: Notes
+        report.other || '',                                 // R: Other
+        emp.totalHours,                                     // S: Total Hours
       ]
     })
 
