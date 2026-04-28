@@ -26,6 +26,7 @@ import {
   type WorkEntry,
   type RoxyWebhookData,
 } from '@/lib/repositories'
+import { getTenantConfig } from '@/lib/tenant/config'
 
 interface ProcessingResult {
   success: boolean
@@ -42,16 +43,16 @@ interface ProcessingResult {
 /**
  * Process a report from the ElevenLabs webhook
  */
-export async function processReport(data: RoxyWebhookData): Promise<ProcessingResult> {
+export async function processReport(data: RoxyWebhookData, tenantId: string = 'parkway'): Promise<ProcessingResult> {
   const errors: string[] = []
   const warnings: string[] = []
   const processedEmployees: ProcessingResult['processedEmployees'] = []
 
   try {
-    const reportRepo = getReportRepository()
-    const employeeRepo = getEmployeeRepository()
-    const jobSiteRepo = getJobSiteRepository()
-    const vendorRepo = getVendorRepository()
+    const reportRepo = getReportRepository(tenantId)
+    const employeeRepo = getEmployeeRepository(tenantId)
+    const jobSiteRepo = getJobSiteRepository(tenantId)
+    const vendorRepo = getVendorRepository(tenantId)
 
     // Load employee roster for name matching
     let rosterEmployees: Awaited<ReturnType<typeof employeeRepo.getAllActive>> = []
@@ -183,7 +184,7 @@ export async function processReport(data: RoxyWebhookData): Promise<ProcessingRe
     // Build the report
     const report: Omit<DailyReport, 'id' | 'createdAt' | 'updatedAt'> = {
       submittedAt: new Date(data.timestamp || Date.now()),
-      timezone: 'America/New_York',
+      timezone: getTenantConfig(tenantId)?.timezone || 'America/New_York',
       jobSite: data.job_site,
       normalizedJobSite,
       employees: employeeHours,

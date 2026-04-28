@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import ErrorMessage from '@/components/ErrorMessage'
+import { useTenant } from '@/lib/tenant/context'
 
 const VoiceSession = dynamic(() => import('@/components/VoiceSession'), {
   ssr: false,
@@ -29,7 +30,7 @@ interface ReportPreview {
   transcript?: Array<{ role: string; message: string; time_in_call_secs?: number }>
 }
 
-const ADMIN_API = process.env.NEXT_PUBLIC_ADMIN_API_URL || 'https://dor3wzjhjja3zwzshurzjt4laq0uiztn.lambda-url.us-east-1.on.aws'
+const ADMIN_API = process.env.NEXT_PUBLIC_ADMIN_API_URL || '/api/admin'
 
 const CHECKLIST_ITEMS = [
   { label: 'Job site', icon: 'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z' },
@@ -42,6 +43,7 @@ const CHECKLIST_ITEMS = [
 ]
 
 export default function Home() {
+  const tenant = useTenant()
   const [state, setState] = useState<AppState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(null)
@@ -137,8 +139,8 @@ export default function Home() {
 
             <div className="flex flex-1 flex-col items-center justify-center px-8">
               <Image
-                src="/parkway-logo.png"
-                alt="Parkway Construction Services"
+                src={tenant.logo}
+                alt={tenant.name}
                 width={96}
                 height={96}
                 className="rounded-2xl shadow-2xl shadow-yellow-400/10 mb-8"
@@ -179,7 +181,7 @@ export default function Home() {
                 View Reports
               </a>
               <footer className="mt-2 text-center">
-                <span className="text-[10px] text-neutral-700 tracking-widest uppercase">Parkway Construction Services</span>
+                <span className="text-[10px] text-neutral-700 tracking-widest uppercase">{tenant.name}</span>
               </footer>
             </div>
           </div>

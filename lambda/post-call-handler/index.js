@@ -24,6 +24,40 @@ const GOOGLE_DRIVE_TRANSCRIPTS_FOLDER = process.env.GOOGLE_DRIVE_TRANSCRIPTS_FOL
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const DYNAMODB_TABLE_NAME = process.env.DYNAMODB_TABLE_NAME || 'sitelogix-v4-reports';
 
+// Multi-tenant Google config — keyed by tenantId
+const TENANT_GOOGLE_CONFIG = {
+  parkway: {
+    sheetsId: process.env.GOOGLE_SHEETS_ID,
+    audioFolder: process.env.GOOGLE_DRIVE_AUDIO_FOLDER || '1QfnjfPbsGCJDSDH04o7nqwl0TiRosXD7',
+    transcriptsFolder: process.env.GOOGLE_DRIVE_TRANSCRIPTS_FOLDER || '1mTBMlD7ksiJSu9Qh-vnjjPB6hGIiaArf',
+  },
+  jrconstruction: {
+    sheetsId: process.env.JR_CONSTRUCTION_SHEETS_ID,
+    audioFolder: process.env.JR_CONSTRUCTION_DRIVE_AUDIO_FOLDER,
+    transcriptsFolder: process.env.JR_CONSTRUCTION_DRIVE_TRANSCRIPTS_FOLDER,
+  },
+};
+
+function getTenantGoogleConfig(tenantId) {
+  return TENANT_GOOGLE_CONFIG[tenantId] || TENANT_GOOGLE_CONFIG.parkway;
+}
+
+// Look up tenantId from an existing DynamoDB report
+async function getTenantIdForReport(reportId) {
+  try {
+    const { GetCommand } = require('@aws-sdk/lib-dynamodb');
+    const result = await dynamoClient.send(new GetCommand({
+      TableName: DYNAMODB_TABLE_NAME,
+      Key: { reportId },
+      ProjectionExpression: 'tenantId',
+    }));
+    return result.Item?.tenantId || 'parkway';
+  } catch (e) {
+    console.warn(`[Tenant] Could not look up tenantId for ${reportId}:`, e.message);
+    return 'parkway';
+  }
+}
+
 // DynamoDB client
 const dynamoClient = DynamoDBDocumentClient.from(
   new DynamoDBClient({ region: 'us-east-1' }),
@@ -174,11 +208,11 @@ async function uploadToDrive(auth, buffer, filename, folderId, mimeType) {
 }
 
 // Find recent report without files and update it
-async function updateReportWithFiles(auth, audioUrl, transcriptUrl) {
+async function updateReportWithFiles(auth, audioUrl, transcriptUrl, sheetsId = GOOGLE_SHEETS_ID) {
   const sheets = google.sheets({ version: 'v4', auth });
 
   const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: GOOGLE_SHEETS_ID,
+    spreadsheetId: sheetsId,
     range: "'Main Report Log'!A:R",
   });
 
@@ -250,7 +284,7 @@ async function updateReportWithFiles(auth, audioUrl, transcriptUrl) {
 
   if (updates.length > 0) {
     await sheets.spreadsheets.values.batchUpdate({
-      spreadsheetId: GOOGLE_SHEETS_ID,
+      spreadsheetId: sheetsId,
       requestBody: {
         valueInputOption: 'USER_ENTERED',
         data: updates,
@@ -263,11 +297,11 @@ async function updateReportWithFiles(auth, audioUrl, transcriptUrl) {
 }
 
 // Get all reports without files
-async function getReportsWithoutFiles(auth) {
+async function getReportsWithoutFiles(auth, sheetsId = GOOGLE_SHEETS_ID) {
   const sheets = google.sheets({ version: 'v4', auth });
 
   const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: GOOGLE_SHEETS_ID,
+    spreadsheetId: sheetsId,
     range: "'Main Report Log'!A:R",
   });
 
@@ -330,7 +364,7 @@ async function getReportsWithoutFiles(auth) {
 }
 
 // Update specific report with file URLs
-async function updateSpecificReport(auth, reportId, rowIndices, audioUrl, transcriptUrl) {
+async function updateSpecificReport(auth, reportId, rowIndices, audioUrl, transcriptUrl, sheetsId = GOOGLE_SHEETS_ID) {
   const sheets = google.sheets({ version: 'v4', auth });
 
   const updates = [];
@@ -351,7 +385,7 @@ async function updateSpecificReport(auth, reportId, rowIndices, audioUrl, transc
 
   if (updates.length > 0) {
     await sheets.spreadsheets.values.batchUpdate({
-      spreadsheetId: GOOGLE_SHEETS_ID,
+      spreadsheetId: sheetsId,
       requestBody: {
         valueInputOption: 'USER_ENTERED',
         data: updates,
@@ -515,7 +549,7 @@ async function batchProcess(auth) {
 }
 
 // Write/update report in DynamoDB with transcript and file URLs
-async function writeToDynamoDB(reportId, conversationId, transcript, transcriptText, audioUrl, transcriptUrl, callDurationSecs, reportData, transcriptReportData) {
+async function writeToDynamoDB(reportId, conversationId, transcript, transcriptText, audioUrl, transcriptUrl, callDurationSecs, reportData, transcriptReportData, tenantId = 'parkway') {
   const now = new Date().toISOString();
 
   // Try to find existing report by looking at recent items
@@ -589,6 +623,7 @@ async function writeToDynamoDB(reportId, conversationId, transcript, transcriptT
     const item = {
       reportId,
       entityType: 'REPORT',
+      tenantId,
       submittedAt: now,
       jobSite: rd.jobSite || reportData?.jobSite || 'Unknown',
       timezone: 'America/New_York',
@@ -629,10 +664,10 @@ async function writeToDynamoDB(reportId, conversationId, transcript, transcriptT
 
 // Load employee roster from Google Sheets for name matching
 // Returns array of { fullName, goByName } for matching
-async function loadEmployeeRoster(auth) {
+async function loadEmployeeRoster(auth, sheetsId = GOOGLE_SHEETS_ID) {
   const sheets = google.sheets({ version: 'v4', auth });
   const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: GOOGLE_SHEETS_ID,
+    spreadsheetId: sheetsId,
     range: "'Employee Roster'!A2:C", // A: ID, B: Full Name, C: Go By Name
   });
   const rows = response.data.values || [];
@@ -955,20 +990,20 @@ function generateReportSummary(reportData, employees, callDurationSecs) {
 
 // Read the most recent report data from Google Sheets for DynamoDB sync
 // Also applies employee name matching against the roster
-async function getRecentReportData(auth, reportId) {
+async function getRecentReportData(auth, reportId, sheetsId = GOOGLE_SHEETS_ID) {
   const sheets = google.sheets({ version: 'v4', auth });
 
   // Load roster for name matching
   let roster = [];
   try {
-    roster = await loadEmployeeRoster(auth);
+    roster = await loadEmployeeRoster(auth, sheetsId);
     console.log(`[NameMatch] Loaded ${roster.length} employees from roster`);
   } catch (e) {
     console.warn('[NameMatch] Could not load roster:', e.message);
   }
 
   const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: GOOGLE_SHEETS_ID,
+    spreadsheetId: sheetsId,
     range: "'Main Report Log'!A:R",
   });
 
@@ -1073,9 +1108,15 @@ exports.handler = async (event) => {
       console.log('Could not fetch conversation details for date, using current date');
     }
 
-    // Get existing files
-    const existingAudioFiles = await listDriveFiles(auth, GOOGLE_DRIVE_AUDIO_FOLDER);
-    const existingTranscriptFiles = await listDriveFiles(auth, GOOGLE_DRIVE_TRANSCRIPTS_FOLDER);
+    // Resolve tenant — first try to find the report in DynamoDB to get tenantId
+    // For single conversation mode, we match the report first from Parkway (default),
+    // then look up its tenantId
+    let tenantId = 'parkway';
+    let tenantConfig = getTenantGoogleConfig(tenantId);
+
+    // Get existing files for default tenant
+    let existingAudioFiles = await listDriveFiles(auth, tenantConfig.audioFolder);
+    let existingTranscriptFiles = await listDriveFiles(auth, tenantConfig.transcriptsFolder);
 
     const { audioUrl, transcriptUrl } = await processConversation(
       auth,
@@ -1085,11 +1126,30 @@ exports.handler = async (event) => {
       existingTranscriptFiles
     );
 
-    // Update Google Sheet
+    // Update Google Sheet — try to find the report and its tenant
     let reportId = null;
     if (audioUrl || transcriptUrl) {
-      reportId = await updateReportWithFiles(auth, audioUrl, transcriptUrl);
-      console.log('Updated report:', reportId);
+      reportId = await updateReportWithFiles(auth, audioUrl, transcriptUrl, tenantConfig.sheetsId);
+
+      // If not found in parkway, try other tenants
+      if (!reportId) {
+        for (const [tid, tc] of Object.entries(TENANT_GOOGLE_CONFIG)) {
+          if (tid === 'parkway' || !tc.sheetsId) continue;
+          reportId = await updateReportWithFiles(auth, audioUrl, transcriptUrl, tc.sheetsId);
+          if (reportId) {
+            tenantId = tid;
+            tenantConfig = tc;
+            break;
+          }
+        }
+      }
+      console.log('Updated report:', reportId, 'tenant:', tenantId);
+    }
+
+    // If we found a report, verify its tenantId from DynamoDB
+    if (reportId) {
+      tenantId = await getTenantIdForReport(reportId);
+      tenantConfig = getTenantGoogleConfig(tenantId);
     }
 
     // Write to DynamoDB (system of record)
@@ -1102,7 +1162,7 @@ exports.handler = async (event) => {
       // If we matched a report in Sheets, pull its data for DynamoDB
       let reportData = null;
       if (reportId) {
-        reportData = await getRecentReportData(auth, reportId);
+        reportData = await getRecentReportData(auth, reportId, tenantConfig.sheetsId);
       }
 
       // Extract structured data from transcript tool call
@@ -1163,9 +1223,10 @@ exports.handler = async (event) => {
         transcriptUrl,
         callDurationSecs,
         reportData,
-        transcriptReportData
+        transcriptReportData,
+        tenantId
       );
-      console.log('[DynamoDB] Write complete for conversation:', convData.conversation_id);
+      console.log('[DynamoDB] Write complete for conversation:', convData.conversation_id, 'tenant:', tenantId);
     } catch (dynamoError) {
       console.error('[DynamoDB] Write failed (non-blocking):', dynamoError.message);
     }

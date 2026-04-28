@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { headers } from 'next/headers'
+import { getTenantConfig } from '@/lib/tenant/config'
 
 /**
  * POST /api/voice/session
@@ -8,8 +10,12 @@ import { NextRequest, NextResponse } from 'next/server'
  */
 export async function POST(request: NextRequest) {
   try {
+    const h = await headers()
+    const tenantSlug = h.get('x-tenant-slug') || 'parkway'
+    const tenant = getTenantConfig(tenantSlug)
+
     const apiKey = process.env.ELEVEN_LABS_API_KEY
-    const agentId = process.env.ELEVEN_LABS_AGENT_ID
+    const agentId = tenant?.elevenLabsAgentId || process.env.ELEVEN_LABS_AGENT_ID
 
     if (!apiKey || !agentId) {
       console.error('Missing ElevenLabs configuration:', {

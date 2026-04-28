@@ -3,15 +3,18 @@
  *
  * Handles OAuth2 authentication for Google Sheets and Drive APIs.
  * Uses refresh token to get new access tokens automatically.
+ * Supports multi-tenant: each tenant has its own Sheet/Drive IDs.
  */
 
 import { google } from 'googleapis'
 import { OAuth2Client } from 'google-auth-library'
+import { getTenantConfig } from '@/lib/tenant/config'
 
 let oauth2Client: OAuth2Client | null = null
 
 /**
  * Get authenticated OAuth2 client for Google APIs
+ * Currently shared across all tenants (Impact Consulting creds)
  */
 export function getGoogleAuth(): OAuth2Client {
   if (oauth2Client) {
@@ -54,25 +57,44 @@ export function getDriveClient() {
 }
 
 /**
- * Configuration for Google Workspace resources
+ * Tab names in the spreadsheet (standardized across all tenants)
+ */
+export const GOOGLE_TABS = {
+  EMPLOYEES: 'Employee Roster',
+  JOB_SITES: 'Project Sites',
+  VENDORS: 'Suppliers',
+  MAIN_LOG: 'Main Report Log',
+  PAYROLL_SUMMARY: 'Payroll Summary',
+}
+
+/**
+ * Get tenant-specific Google configuration
+ */
+export function getGoogleConfig(tenantId: string) {
+  const tenant = getTenantConfig(tenantId)
+  if (!tenant) {
+    throw new Error(`Unknown tenant: ${tenantId}`)
+  }
+
+  return {
+    SHEETS_ID: tenant.googleSheetsId,
+    TABS: GOOGLE_TABS,
+    DRIVE_FOLDER_ID: tenant.googleDriveFolderId,
+    DRIVE_FOLDERS: {
+      AUDIO: tenant.googleDriveAudioFolderId,
+      TRANSCRIPTS: tenant.googleDriveTranscriptsFolderId,
+    },
+  }
+}
+
+/**
+ * Legacy: default config for backwards compatibility
+ * @deprecated Use getGoogleConfig(tenantId) instead
  */
 export const GOOGLE_CONFIG = {
-  // Parkway Reporting Database
   SHEETS_ID: process.env.GOOGLE_SHEETS_ID || '1lb8nmFjvKdWmoqSLaowEKWEzGzNUPw7CuTTZ7k1FIg4',
-
-  // Tab names in the spreadsheet
-  TABS: {
-    EMPLOYEES: 'Employee Roster',
-    JOB_SITES: 'Project Sites',
-    VENDORS: 'Suppliers',
-    MAIN_LOG: 'Main Report Log',
-    PAYROLL_SUMMARY: 'Payroll Summary',
-  },
-
-  // Parkway Database Drive Folder
+  TABS: GOOGLE_TABS,
   DRIVE_FOLDER_ID: process.env.GOOGLE_DRIVE_FOLDER_ID || '1UFwgLhlBdgdK8As2EmzW-nHNreHsYeqm',
-
-  // Specific subfolder IDs (pre-created in Google Drive)
   DRIVE_FOLDERS: {
     AUDIO: process.env.GOOGLE_DRIVE_AUDIO_FOLDER_ID || '1QfnjfPbsGCJDSDH04o7nqwl0TiRosXD7',
     TRANSCRIPTS: process.env.GOOGLE_DRIVE_TRANSCRIPTS_FOLDER_ID || '1mTBMlD7ksiJSu9Qh-vnjjPB6hGIiaArf',

@@ -22,6 +22,7 @@ import { getDynamoClient, DYNAMO_CONFIG } from './client'
 export interface DynamoReportItem {
   reportId: string
   entityType: 'REPORT'
+  tenantId: string
   submittedAt: string
   jobSite: string
   timezone: string
@@ -98,6 +99,11 @@ export interface DynamoReportItem {
 export class DynamoDBReportRepository implements ReportRepository {
   private client = getDynamoClient()
   private tableName = DYNAMO_CONFIG.TABLE_NAME
+  private tenantId: string
+
+  constructor(tenantId: string = 'parkway') {
+    this.tenantId = tenantId
+  }
 
   async saveReport(report: Omit<DailyReport, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     const reportId = `RPT-${Date.now()}`
@@ -106,6 +112,7 @@ export class DynamoDBReportRepository implements ReportRepository {
     const item: DynamoReportItem = {
       reportId,
       entityType: 'REPORT',
+      tenantId: this.tenantId,
       submittedAt: report.submittedAt.toISOString(),
       jobSite: report.jobSite || 'Unknown',
       timezone: report.timezone,
@@ -198,10 +205,12 @@ export class DynamoDBReportRepository implements ReportRepository {
         TableName: this.tableName,
         IndexName: DYNAMO_CONFIG.INDEXES.BY_DATE,
         KeyConditionExpression: 'entityType = :et AND submittedAt BETWEEN :start AND :end',
+        FilterExpression: 'tenantId = :tid',
         ExpressionAttributeValues: {
           ':et': 'REPORT',
           ':start': start.toISOString(),
           ':end': end.toISOString(),
+          ':tid': this.tenantId,
         },
         ScanIndexForward: false,
       })
@@ -213,22 +222,45 @@ export class DynamoDBReportRepository implements ReportRepository {
   }
 
   async getRecentReports(limit = 20): Promise<DailyReport[]> {
-    const result = await this.client.send(
-      new QueryCommand({
-        TableName: this.tableName,
-        IndexName: DYNAMO_CONFIG.INDEXES.BY_DATE,
-        KeyConditionExpression: 'entityType = :et',
-        ExpressionAttributeValues: {
-          ':et': 'REPORT',
-        },
-        ScanIndexForward: false,
-        Limit: limit,
-      })
-    )
+    // Use byTenantDate GSI if available, fallback to byDate with filter
+    try {
+      const result = await this.client.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          IndexName: DYNAMO_CONFIG.INDEXES.BY_TENANT_DATE,
+          KeyConditionExpression: 'tenantId = :tid',
+          ExpressionAttributeValues: {
+            ':tid': this.tenantId,
+          },
+          ScanIndexForward: false,
+          Limit: limit,
+        })
+      )
 
-    return (result.Items || []).map((item) =>
-      this.mapToDailyReport(item as DynamoReportItem)
-    )
+      return (result.Items || []).map((item) =>
+        this.mapToDailyReport(item as DynamoReportItem)
+      )
+    } catch {
+      // Fallback: use byDate index with filter expression
+      const result = await this.client.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          IndexName: DYNAMO_CONFIG.INDEXES.BY_DATE,
+          KeyConditionExpression: 'entityType = :et',
+          FilterExpression: 'tenantId = :tid',
+          ExpressionAttributeValues: {
+            ':et': 'REPORT',
+            ':tid': this.tenantId,
+          },
+          ScanIndexForward: false,
+          Limit: limit,
+        })
+      )
+
+      return (result.Items || []).map((item) =>
+        this.mapToDailyReport(item as DynamoReportItem)
+      )
+    }
   }
 
   async getReportsBySite(jobSite: string, limit = 20): Promise<DailyReport[]> {
@@ -237,8 +269,10 @@ export class DynamoDBReportRepository implements ReportRepository {
         TableName: this.tableName,
         IndexName: DYNAMO_CONFIG.INDEXES.BY_SITE,
         KeyConditionExpression: 'jobSite = :site',
+        FilterExpression: 'tenantId = :tid',
         ExpressionAttributeValues: {
           ':site': jobSite,
+          ':tid': this.tenantId,
         },
         ScanIndexForward: false,
         Limit: limit,

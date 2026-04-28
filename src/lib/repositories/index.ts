@@ -6,8 +6,8 @@
  * - Lambda writes to DynamoDB (system of record) + file uploads
  * - Admin dashboard reads from DynamoDB via Lambda Function URL
  *
- * Amplify SSR cannot use AWS SDK (no credentials in managed compute),
- * so all AWS service calls go through standalone Lambdas.
+ * Multi-tenant: All factory functions accept tenantId to scope
+ * data access to the correct Google Sheet / Drive folders.
  */
 
 import type {
@@ -19,93 +19,93 @@ import type {
   FileAdapterType,
 } from './types'
 
-// Lazy-loaded adapters
-let googleEmployeeRepo: EmployeeRepository | null = null
-let googleJobSiteRepo: JobSiteRepository | null = null
-let googleVendorRepo: VendorRepository | null = null
-let googleReportRepo: ReportRepository | null = null
-let googleFileRepo: FileRepository | null = null
+// Per-tenant adapter cache
+const employeeRepoCache = new Map<string, EmployeeRepository>()
+const jobSiteRepoCache = new Map<string, JobSiteRepository>()
+const vendorRepoCache = new Map<string, VendorRepository>()
+const reportRepoCache = new Map<string, ReportRepository>()
+const fileRepoCache = new Map<string, FileRepository>()
 
 /**
- * Get Employee Repository (Google Sheets)
+ * Get Employee Repository (Google Sheets) for a specific tenant
  */
-export function getEmployeeRepository(): EmployeeRepository {
-  if (!googleEmployeeRepo) {
+export function getEmployeeRepository(tenantId: string = 'parkway'): EmployeeRepository {
+  if (!employeeRepoCache.has(tenantId)) {
     const { GoogleSheetsEmployeeRepository } = require('./adapters/google')
-    googleEmployeeRepo = new GoogleSheetsEmployeeRepository()
+    employeeRepoCache.set(tenantId, new GoogleSheetsEmployeeRepository(tenantId))
   }
-  return googleEmployeeRepo!
+  return employeeRepoCache.get(tenantId)!
 }
 
 /**
- * Get Job Site Repository (Google Sheets)
+ * Get Job Site Repository (Google Sheets) for a specific tenant
  */
-export function getJobSiteRepository(): JobSiteRepository {
-  if (!googleJobSiteRepo) {
+export function getJobSiteRepository(tenantId: string = 'parkway'): JobSiteRepository {
+  if (!jobSiteRepoCache.has(tenantId)) {
     const { GoogleSheetsJobSiteRepository } = require('./adapters/google')
-    googleJobSiteRepo = new GoogleSheetsJobSiteRepository()
+    jobSiteRepoCache.set(tenantId, new GoogleSheetsJobSiteRepository(tenantId))
   }
-  return googleJobSiteRepo!
+  return jobSiteRepoCache.get(tenantId)!
 }
 
 /**
- * Get Vendor Repository (Google Sheets)
+ * Get Vendor Repository (Google Sheets) for a specific tenant
  */
-export function getVendorRepository(): VendorRepository {
-  if (!googleVendorRepo) {
+export function getVendorRepository(tenantId: string = 'parkway'): VendorRepository {
+  if (!vendorRepoCache.has(tenantId)) {
     const { GoogleSheetsVendorRepository } = require('./adapters/google')
-    googleVendorRepo = new GoogleSheetsVendorRepository()
+    vendorRepoCache.set(tenantId, new GoogleSheetsVendorRepository(tenantId))
   }
-  return googleVendorRepo!
+  return vendorRepoCache.get(tenantId)!
 }
 
 /**
- * Get Report Repository (Google Sheets)
+ * Get Report Repository (Google Sheets) for a specific tenant
  * Used by Amplify SSR for report writes.
  * DynamoDB writes happen in the post-call Lambda.
  */
-export function getReportRepository(): ReportRepository {
-  if (!googleReportRepo) {
+export function getReportRepository(tenantId: string = 'parkway'): ReportRepository {
+  if (!reportRepoCache.has(tenantId)) {
     const { GoogleSheetsReportRepository } = require('./adapters/google')
-    googleReportRepo = new GoogleSheetsReportRepository()
+    reportRepoCache.set(tenantId, new GoogleSheetsReportRepository(tenantId))
   }
-  return googleReportRepo!
+  return reportRepoCache.get(tenantId)!
 }
 
 /**
  * Alias for backwards compatibility
  */
-export function getSheetsReportRepository(): ReportRepository {
-  return getReportRepository()
+export function getSheetsReportRepository(tenantId: string = 'parkway'): ReportRepository {
+  return getReportRepository(tenantId)
 }
 
 /**
- * Get File Repository (Google Drive)
+ * Get File Repository (Google Drive) for a specific tenant
  */
-export function getFileRepository(): FileRepository {
+export function getFileRepository(tenantId: string = 'parkway'): FileRepository {
   const adapter = (process.env.FILE_ADAPTER || 'google') as FileAdapterType
 
   if (adapter === 's3') {
     throw new Error('S3 adapter not yet implemented')
   }
 
-  if (!googleFileRepo) {
+  if (!fileRepoCache.has(tenantId)) {
     const { GoogleDriveFileRepository } = require('./adapters/google')
-    googleFileRepo = new GoogleDriveFileRepository()
+    fileRepoCache.set(tenantId, new GoogleDriveFileRepository(tenantId))
   }
-  return googleFileRepo!
+  return fileRepoCache.get(tenantId)!
 }
 
 /**
- * Get all repositories at once
+ * Get all repositories for a specific tenant
  */
-export function getRepositories() {
+export function getRepositories(tenantId: string = 'parkway') {
   return {
-    employees: getEmployeeRepository(),
-    jobSites: getJobSiteRepository(),
-    vendors: getVendorRepository(),
-    reports: getReportRepository(),
-    files: getFileRepository(),
+    employees: getEmployeeRepository(tenantId),
+    jobSites: getJobSiteRepository(tenantId),
+    vendors: getVendorRepository(tenantId),
+    reports: getReportRepository(tenantId),
+    files: getFileRepository(tenantId),
   }
 }
 

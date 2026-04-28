@@ -13,6 +13,15 @@ const nextConfig: NextConfig = {
     Google_Refresh_Token: process.env.Google_Refresh_Token,
     GOOGLE_SHEETS_ID: process.env.GOOGLE_SHEETS_ID,
     GOOGLE_DRIVE_FOLDER_ID: process.env.GOOGLE_DRIVE_FOLDER_ID,
+    // JR Construction tenant
+    JR_CONSTRUCTION_SHEETS_ID: process.env.JR_CONSTRUCTION_SHEETS_ID,
+    JR_CONSTRUCTION_DRIVE_FOLDER_ID: process.env.JR_CONSTRUCTION_DRIVE_FOLDER_ID,
+    JR_CONSTRUCTION_DRIVE_AUDIO_FOLDER_ID: process.env.JR_CONSTRUCTION_DRIVE_AUDIO_FOLDER_ID,
+    JR_CONSTRUCTION_DRIVE_TRANSCRIPTS_FOLDER_ID: process.env.JR_CONSTRUCTION_DRIVE_TRANSCRIPTS_FOLDER_ID,
+    // Cognito authentication
+    COGNITO_USER_POOL_ID: process.env.COGNITO_USER_POOL_ID,
+    COGNITO_CLIENT_ID: process.env.COGNITO_CLIENT_ID,
+    COGNITO_REGION: process.env.COGNITO_REGION,
     // Data adapter configuration
     DATA_ADAPTER: process.env.DATA_ADAPTER || 'google',
     FILE_ADAPTER: process.env.FILE_ADAPTER || 'google',

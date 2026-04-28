@@ -74,7 +74,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'daily' | 'payroll' | 'transcript'>('daily')
 
-  const API_BASE = process.env.NEXT_PUBLIC_ADMIN_API_URL || 'https://dor3wzjhjja3zwzshurzjt4laq0uiztn.lambda-url.us-east-1.on.aws'
+  const API_BASE = '/api/admin'
 
   useEffect(() => {
     fetch(`${API_BASE}/reports/${id}`)

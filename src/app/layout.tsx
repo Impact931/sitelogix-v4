@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
+import { getTenantConfig } from "@/lib/tenant/config";
+import { TenantProvider } from "@/lib/tenant/context";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,13 +37,27 @@ export const viewport: Viewport = {
   themeColor: "#111111",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const h = await headers();
+  const tenantSlug = h.get("x-tenant-slug") || "parkway";
+  const tenant = getTenantConfig(tenantSlug);
+
+  // Fallback tenant for safety (fail-closed: use parkway defaults)
+  const activeTenant = tenant || getTenantConfig("parkway")!;
+
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      style={{
+        // @ts-expect-error CSS custom properties
+        "--brand-primary": activeTenant.primaryColor,
+        "--brand-accent": activeTenant.accentColor,
+      }}
+    >
       <head>
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -50,7 +67,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <TenantProvider tenant={activeTenant}>
+          {children}
+        </TenantProvider>
       </body>
     </html>
   );

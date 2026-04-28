@@ -1,28 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getReportRepository } from '@/lib/repositories'
+import { headers } from 'next/headers'
 
 /**
  * GET /api/admin/reports
  *
  * List recent reports from DynamoDB (System of Record)
  * Supports ?limit= and ?site= query params
+ * Tenant-scoped: only returns reports for the current tenant
  */
 export async function GET(request: NextRequest) {
   try {
+    const h = await headers()
+    const tenantId = h.get('x-tenant-slug') || 'parkway'
+
     const { searchParams } = new URL(request.url)
     const limit = Number(searchParams.get('limit')) || 20
     const site = searchParams.get('site')
 
-    console.log('[AdminAPI] Fetching reports:', { limit, site })
+    console.log('[AdminAPI] Fetching reports for tenant:', tenantId, { limit, site })
 
-    const repo = getReportRepository()
-    console.log('[AdminAPI] Got repository instance')
+    // Import DynamoDB adapter directly (admin reads from DynamoDB)
+    const { DynamoDBReportRepository } = await import('@/lib/repositories/adapters/dynamodb/report.adapter')
+    const repo = new DynamoDBReportRepository(tenantId)
+    console.log('[AdminAPI] Got repository instance for tenant:', tenantId)
 
     let reports
     if (site) {
-      const { DynamoDBReportRepository } = await import('@/lib/repositories/adapters/dynamodb/report.adapter')
-      const dynamoRepo = repo as InstanceType<typeof DynamoDBReportRepository>
-      reports = await dynamoRepo.getReportsBySite(site, limit)
+      reports = await repo.getReportsBySite(site, limit)
     } else {
       reports = await repo.getRecentReports(limit)
     }

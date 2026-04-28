@@ -8,7 +8,7 @@
  */
 
 import type { Vendor, VendorRepository } from '../../types'
-import { getSheetsClient, GOOGLE_CONFIG } from './auth'
+import { getSheetsClient, getGoogleConfig } from './auth'
 import Fuse, { IFuseOptions } from 'fuse.js'
 
 const FUSE_OPTIONS: IFuseOptions<Vendor> = {
@@ -22,8 +22,14 @@ const FUSE_OPTIONS: IFuseOptions<Vendor> = {
 
 export class GoogleSheetsVendorRepository implements VendorRepository {
   private sheets = getSheetsClient()
-  private spreadsheetId = GOOGLE_CONFIG.SHEETS_ID
-  private tabName = GOOGLE_CONFIG.TABS.VENDORS
+  private spreadsheetId: string
+  private tabName: string
+
+  constructor(tenantId: string = 'parkway') {
+    const config = getGoogleConfig(tenantId)
+    this.spreadsheetId = config.SHEETS_ID
+    this.tabName = config.TABS.VENDORS
+  }
 
   async getAllActive(): Promise<Vendor[]> {
     const response = await this.sheets.spreadsheets.values.get({

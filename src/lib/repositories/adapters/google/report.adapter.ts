@@ -23,13 +23,20 @@ import type {
   Subcontractor,
   WorkEntry,
 } from '../../types'
-import { getSheetsClient, GOOGLE_CONFIG } from './auth'
+import { getSheetsClient, getGoogleConfig } from './auth'
 
 export class GoogleSheetsReportRepository implements ReportRepository {
   private sheets = getSheetsClient()
-  private spreadsheetId = GOOGLE_CONFIG.SHEETS_ID
-  private mainLogTab = GOOGLE_CONFIG.TABS.MAIN_LOG
-  private payrollTab = GOOGLE_CONFIG.TABS.PAYROLL_SUMMARY
+  private spreadsheetId: string
+  private mainLogTab: string
+  private payrollTab: string
+
+  constructor(tenantId: string = 'parkway') {
+    const config = getGoogleConfig(tenantId)
+    this.spreadsheetId = config.SHEETS_ID
+    this.mainLogTab = config.TABS.MAIN_LOG
+    this.payrollTab = config.TABS.PAYROLL_SUMMARY
+  }
 
   async saveReport(report: Omit<DailyReport, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     const reportId = `RPT-${Date.now()}`

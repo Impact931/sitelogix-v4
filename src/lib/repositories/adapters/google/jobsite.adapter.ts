@@ -8,7 +8,7 @@
  */
 
 import type { JobSite, JobSiteRepository } from '../../types'
-import { getSheetsClient, GOOGLE_CONFIG } from './auth'
+import { getSheetsClient, getGoogleConfig } from './auth'
 import Fuse, { IFuseOptions } from 'fuse.js'
 
 const FUSE_OPTIONS: IFuseOptions<JobSite> = {
@@ -22,8 +22,14 @@ const FUSE_OPTIONS: IFuseOptions<JobSite> = {
 
 export class GoogleSheetsJobSiteRepository implements JobSiteRepository {
   private sheets = getSheetsClient()
-  private spreadsheetId = GOOGLE_CONFIG.SHEETS_ID
-  private tabName = GOOGLE_CONFIG.TABS.JOB_SITES
+  private spreadsheetId: string
+  private tabName: string
+
+  constructor(tenantId: string = 'parkway') {
+    const config = getGoogleConfig(tenantId)
+    this.spreadsheetId = config.SHEETS_ID
+    this.tabName = config.TABS.JOB_SITES
+  }
 
   async getAllActive(): Promise<JobSite[]> {
     const response = await this.sheets.spreadsheets.values.get({

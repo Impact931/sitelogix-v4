@@ -31,5 +31,6 @@ export const DYNAMO_CONFIG = {
   INDEXES: {
     BY_DATE: 'byDate',
     BY_SITE: 'bySite',
+    BY_TENANT_DATE: 'byTenantDate',
   },
 }

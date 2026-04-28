@@ -9,9 +9,6 @@ import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses'
 
 const ses = new SESClient({ region: process.env.DYNAMO_REGION || 'us-east-1' })
 
-const FROM_EMAIL = process.env.SES_FROM_EMAIL || 'jayson@impactconsulting931.com'
-const TO_EMAILS = (process.env.SES_TO_EMAILS || 'jayson@jhr-photography.com').split(',')
-
 interface ReportEmailData {
   reportId: string
   jobSite: string
@@ -21,9 +18,16 @@ interface ReportEmailData {
   submittedAt: Date
   sheetsUrl: string
   dashboardUrl: string
+  tenantName?: string
+  fromEmail?: string
+  toEmails?: string[]
 }
 
 export async function sendReportNotification(data: ReportEmailData): Promise<void> {
+  const FROM_EMAIL = data.fromEmail || process.env.SES_FROM_EMAIL || 'jayson@impactconsulting931.com'
+  const TO_EMAILS = data.toEmails || (process.env.SES_TO_EMAILS || 'jayson@jhr-photography.com').split(',')
+  const tenantLabel = data.tenantName || 'Parkway Construction'
+
   const subject = `SiteLogix Report: ${data.jobSite} — ${data.employeeCount} employees, ${data.totalManHours} hrs`
 
   const safetyBadge = data.hasSafetyIncidents
@@ -79,7 +83,7 @@ export async function sendReportNotification(data: ReportEmailData): Promise<voi
       </div>
     </div>
     <div style="padding:16px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;">
-      Sent by SiteLogix v4 • Parkway Construction
+      Sent by SiteLogix v4 • ${tenantLabel}
     </div>
   </div>
 </body>

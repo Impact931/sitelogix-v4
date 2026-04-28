@@ -7,16 +7,24 @@
 
 import { Readable } from 'stream'
 import type { FileRepository } from '../../types'
-import { getDriveClient, GOOGLE_CONFIG } from './auth'
+import { getDriveClient, getGoogleConfig } from './auth'
 
 export class GoogleDriveFileRepository implements FileRepository {
   private drive = getDriveClient()
+  private audioFolderId: string
+  private transcriptsFolderId: string
+
+  constructor(tenantId: string = 'parkway') {
+    const config = getGoogleConfig(tenantId)
+    this.audioFolderId = config.DRIVE_FOLDERS.AUDIO
+    this.transcriptsFolderId = config.DRIVE_FOLDERS.TRANSCRIPTS
+  }
 
   /**
    * Upload audio buffer to Google Drive
    */
   async uploadAudio(buffer: Buffer, filename: string): Promise<string> {
-    const folderId = GOOGLE_CONFIG.DRIVE_FOLDERS.AUDIO
+    const folderId = this.audioFolderId
 
     const response = await this.drive.files.create({
       requestBody: {
@@ -67,7 +75,7 @@ export class GoogleDriveFileRepository implements FileRepository {
    * Upload transcript content to Google Drive
    */
   async uploadTranscript(content: string, filename: string): Promise<string> {
-    const folderId = GOOGLE_CONFIG.DRIVE_FOLDERS.TRANSCRIPTS
+    const folderId = this.transcriptsFolderId
 
     const response = await this.drive.files.create({
       requestBody: {

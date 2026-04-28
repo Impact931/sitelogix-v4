@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { headers } from 'next/headers'
 import { processReport, validateWebhookData } from '@/services/report-processor'
 import type { RoxyWebhookData } from '@/lib/repositories'
 
@@ -13,9 +14,12 @@ import type { RoxyWebhookData } from '@/lib/repositories'
  */
 export async function POST(request: NextRequest) {
   try {
+    const h = await headers()
+    const tenantId = h.get('x-tenant-slug') || 'parkway'
+
     const payload = await request.json()
 
-    console.log('[Webhook] Received payload:', JSON.stringify(payload, null, 2))
+    console.log('[Webhook] Received payload for tenant:', tenantId, JSON.stringify(payload, null, 2))
 
     // The payload comes directly from the ElevenLabs tool call
     // It matches our RoxyWebhookData interface (snake_case from ElevenLabs)
@@ -53,8 +57,8 @@ export async function POST(request: NextRequest) {
       safetyCount: reportData.safety?.length || 0,
     })
 
-    // Process and save the report
-    const result = await processReport(reportData)
+    // Process and save the report (tenant-scoped)
+    const result = await processReport(reportData, tenantId)
 
     if (!result.success) {
       console.error('[Webhook] Report processing failed:', result.errors)

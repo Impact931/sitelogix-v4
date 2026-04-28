@@ -7,12 +7,18 @@
 
 import type { Employee, EmployeeRepository } from '../../types'
 import { findBestMatch, levenshteinDistance } from '../../utils/fuzzy-match'
-import { getSheetsClient, GOOGLE_CONFIG } from './auth'
+import { getSheetsClient, getGoogleConfig } from './auth'
 
 export class GoogleSheetsEmployeeRepository implements EmployeeRepository {
   private sheets = getSheetsClient()
-  private spreadsheetId = GOOGLE_CONFIG.SHEETS_ID
-  private tabName = GOOGLE_CONFIG.TABS.EMPLOYEES
+  private spreadsheetId: string
+  private tabName: string
+
+  constructor(tenantId: string = 'parkway') {
+    const config = getGoogleConfig(tenantId)
+    this.spreadsheetId = config.SHEETS_ID
+    this.tabName = config.TABS.EMPLOYEES
+  }
 
   async getAllActive(): Promise<Employee[]> {
     const employees = await this.getAll()
